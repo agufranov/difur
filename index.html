@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Дифуры 1D — псевдоспектральная песочница</title>
+<style>
+  :root{
+    --bg:#0a0e15; --panel:#111827; --panel2:#0e1420; --line:#1e2a3b;
+    --txt:#d8e3f0; --dim:#7b8ca3; --accent:#5ad1ff; --accent2:#ffb454;
+    --bad:#ff6b6b; --ok:#63d68a; --isl:#16202f; --par:#c9a1ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.45 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100vh}
+
+  header{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;
+         background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  header .lg{font-size:20px;color:var(--accent);font-weight:600;letter-spacing:.5px;padding-top:4px}
+
+  /* поле ввода: прозрачный textarea поверх подложки — весь видимый текст (раскраска
+     и метка ошибки) рисуется на подложке. Шрифт, паддинг, рамка и правила переноса
+     у них обязаны совпадать, иначе раскраска уедет относительно каретки. */
+  #eqbox{position:relative;flex:1;min-width:180px}
+  #eq,#eqhl{display:block;width:100%;margin:0;border:1px solid var(--line);border-radius:6px;
+      padding:7px 10px;font:14px/1.5 "Cascadia Mono",Consolas,monospace;
+      white-space:pre-wrap;overflow-wrap:break-word}
+  /* высоту задаёт autosizeEq() в app.js; max-height — предохранитель на длинную систему */
+  #eq{position:relative;z-index:1;background:transparent;color:transparent;
+      caret-color:var(--txt);resize:none;height:38px;max-height:40vh;overflow:auto}
+  #eq::selection{background:rgba(90,209,255,.28)}
+  #eqhl{position:absolute;inset:0;z-index:0;background:var(--panel2);color:var(--txt);
+        border-color:transparent;pointer-events:none;overflow:hidden}
+  #eq:focus{outline:none;border-color:var(--accent)}
+  #eq.bad,#eq.bad:focus{border-color:var(--bad)}
+  #eqhl .mk{background:rgba(255,107,107,.2);border-radius:3px;
+            text-decoration:underline wavy var(--bad);text-decoration-skip-ink:none;
+            text-underline-offset:3px}
+  /* раскраска ввода: поля — цветом своей кривой (задаётся на месте), остальное здесь.
+     Ни жирного, ни курсива: в подложке они сдвинули бы текст относительно каретки. */
+  #eqhl .dv{opacity:.72}                    /* хвост производной: ux, utt */
+  #eqhl .pr{color:var(--par)}               /* константы */
+  #eqhl .fn{color:var(--ok)}                /* функции */
+  #eqhl .cn{color:#93a6bd}                  /* x, t, pi, e */
+  #eqhl .nu{color:var(--txt)}
+  #eqhl .op{color:#6f8199}
+  #eqhl .cm{color:var(--dim)}
+
+  /* список пресетов: кнопка + свой выпадающий список + превью формулы справа */
+  #presetbox{position:relative;width:300px;flex:none}
+  #presetbtn{width:100%;text-align:left;padding:7px 10px;display:flex;align-items:center}
+  #presetbtn::after{content:"▾";margin-left:auto;padding-left:8px;color:var(--dim)}
+  #presetbtn.open{border-color:var(--accent);color:#fff}
+  #plist{display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;width:100%;
+         max-height:min(62vh,440px);overflow-y:auto;padding:4px;background:var(--isl);
+         border:1px solid #2b3d57;border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  #plist.on{display:block}
+  #plist::-webkit-scrollbar{width:8px}
+  #plist::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
+  .pitem{padding:5px 9px;border-radius:6px;cursor:pointer;
+         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pitem.cur{color:var(--accent)}
+  .pitem.hi{background:#12384a;color:#fff}
+
+  #eqprev{position:fixed;z-index:70;visibility:hidden;opacity:0;transition:opacity .12s;
+          max-width:min(420px,42vw);padding:11px 15px;background:#16202f;
+          border:1px solid #2b3d57;border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.6);
+          pointer-events:none;overflow-x:auto}
+  #eqprev.on{visibility:visible;opacity:1}
+  /* формула: боксы, как в TeX — дробь этажеркой, степень верхним индексом,
+     скобки не глифом, а нарисованные под высоту содержимого (см. fitMath) */
+  .peq{display:flex;align-items:stretch;gap:7px;
+       font:16px/1.75 Cambria,Georgia,"Times New Roman",serif;color:var(--txt)}
+  .peq .pl{white-space:nowrap}
+  .peq b{font-weight:400}                    /* поле; цвет — своей кривой, задан на месте */
+  .peq sub{font-size:.62em;vertical-align:-.28em;letter-spacing:.02em;opacity:.8}
+  .peq sup{font-size:.66em;vertical-align:.56em;letter-spacing:.02em}
+  .peq i{color:var(--par);font-style:italic}   /* константа с ползунком */
+  .peq .cn{color:#93a6bd}                      /* x, t, pi, e */
+  .peq .fnm{color:var(--ok)}
+  .peq .bo,.peq .eqs,.peq .mu,.peq .un,.peq .pn{color:#9fb0c6}
+  .peq .bo{margin:0 .3em}
+  .peq .eqs{margin:0 .44em}
+  .peq .mu{margin:0 .09em}
+  .peq .cm{color:var(--dim);font-size:.8em;font-style:italic}
+
+  .dlm{position:relative;flex:none;align-self:stretch}
+  .dlm>svg{position:absolute;left:0;top:0;overflow:visible}
+  .dlm path{fill:none;stroke:currentColor;stroke-width:1.25;
+            stroke-linecap:round;stroke-linejoin:round}
+  .peq .brace{width:.78em;color:var(--dim)}
+  .grp{display:inline-flex;align-items:stretch;vertical-align:middle}
+  .grp>.dlm{width:.4em;color:#9fb0c6}
+  .grp>.gb{display:inline-block;padding:0 .12em}
+  .rt{display:inline-flex;align-items:stretch;vertical-align:middle}
+  .rt>.dlm{width:.6em}
+  .rt>.rb{border-top:1.2px solid currentColor;padding:.14em .22em 0 .08em}
+  /* дробь: середина этажерки садится на математическую ось (vertical-align:middle) */
+  .frac{display:inline-flex;flex-direction:column;align-items:center;
+        vertical-align:middle;font-size:.92em;margin:0 .16em}
+  .frac>span{padding:0 .3em;line-height:1.25}
+  .frac>.fnum{border-bottom:1px solid currentColor}
+  .hcol{display:flex;flex-direction:column;gap:5px;flex:none}
+  #apply{white-space:nowrap}
+  button:disabled{opacity:.42;cursor:default}
+  button:disabled:hover{border-color:var(--line);color:var(--txt)}
+  #msg{flex:none;max-width:26ch;font-size:11px;line-height:1.4}
+  #err{color:var(--bad)}
+  #warn{color:var(--accent2)}
+
+  @media (max-width:900px){
+    header{align-items:stretch}
+    header .lg{display:none}
+    #presetbox{order:-1;width:100%;flex:1 0 100%}   /* на узком экране селект сверху */
+    #msg{max-width:none;flex:1 0 100%}
+  }
+
+  button,select,input[type=number],input[type=text]{
+    background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:6px;padding:5px 9px;font:inherit}
+  button{cursor:pointer;transition:.12s}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.on{background:#12384a;border-color:var(--accent);color:#fff}
+  select{padding:5px 6px}
+  input[type=number]{width:74px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:18px}
+
+  main{flex:1;display:flex;min-height:0}
+  #plots{flex:1;display:flex;flex-direction:column;min-width:0;padding:10px;gap:8px}
+  .cwrap{position:relative;border:1px solid var(--line);border-radius:8px;
+         background:var(--panel2);overflow:hidden}
+  #pw{flex:1;min-height:180px}
+  #xw{height:34%;min-height:110px;flex:none}
+  canvas{display:block;width:100%;height:100%}
+  #plot{cursor:crosshair;touch-action:none}
+  .tag{position:absolute;top:6px;right:9px;font-size:11px;color:var(--dim);
+       pointer-events:none;letter-spacing:.4px}
+  #hint{position:absolute;top:6px;left:9px;font-size:11px;color:var(--dim);pointer-events:none}
+
+  aside{width:288px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+        overflow-y:auto;padding:10px 12px 40px}
+  aside::-webkit-scrollbar{width:8px}
+  aside::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
+  /* разделы панели — острова: каждая группа настроек в своей карточке */
+  .isl{background:var(--isl);border:1px solid var(--line);border-radius:10px;
+       padding:9px 11px 11px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+  h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;
+     color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px}
+  .row{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+  .row>label{color:var(--dim);min-width:78px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .chk{display:flex;align-items:center;gap:7px;margin:5px 0;cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--accent);width:15px;height:15px}
+  #diag{font:12px/1.7 "Cascadia Mono",Consolas,monospace}
+  #diag b{color:var(--dim);font-weight:400;display:inline-block;width:82px}
+  #diag span{color:var(--accent)}
+  #status{margin-top:6px;font-size:12px}
+  .par{margin:8px 0}
+  .par .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:5px}
+  .par .top label{color:var(--accent2);font-family:"Cascadia Mono",Consolas,monospace;flex:1}
+  .par .top button{padding:2px 7px;font-size:12px}
+  .par .sc{color:var(--dim);font-size:10px;display:flex;justify-content:space-between}
+  #chips{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+  .chip{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;
+        border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-size:12px;
+        font-family:"Cascadia Mono",Consolas,monospace}
+  .chip.sel{border-color:currentColor;background:#12384a}
+  .chip .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  .chip .dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.5}
+  #diag table{border-collapse:collapse;width:100%}
+  #diag td{padding:1px 0}
+  #diag td.n{color:var(--dim);width:34%}
+  .big{font-size:16px;padding:6px 0}
+  .note{color:var(--dim);font-size:11px;line-height:1.5;margin-top:6px}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;
+      border-radius:4px;padding:0 4px;font-size:11px;font-family:inherit}
+
+  /* кнопки начальных данных — миниатюры профиля */
+  #tools{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+  #tools button{padding:3px 2px;height:36px;color:var(--dim);display:flex;
+                align-items:center;justify-content:center}
+  #tools button:hover{color:var(--txt)}
+  #tools button.on{background:#12384a;border-color:var(--accent);color:var(--accent)}
+  #tools svg{display:block;width:100%;height:100%}
+  #tools svg .zero{stroke:currentColor;opacity:.25;stroke-width:1;stroke-dasharray:2 3}
+  #tools svg .sh{fill:none;stroke:currentColor;stroke-width:2;
+                 stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+
+  /* всплывающая подсказка */
+  #tip{position:fixed;z-index:50;left:0;top:0;max-width:230px;padding:7px 10px;
+       background:#16202f;border:1px solid #2b3d57;border-radius:8px;
+       box-shadow:0 8px 24px rgba(0,0,0,.55);pointer-events:none;
+       opacity:0;transform:translateY(4px);transition:opacity .13s,transform .13s;
+       font-size:12px;line-height:1.45}
+  #tip.on{opacity:1;transform:translateY(0)}
+  #tip b{display:block;color:var(--accent);font-weight:600;margin-bottom:2px}
+  #tip i{color:var(--dim);font-style:normal}
+  #tip::after{content:"";position:absolute;width:8px;height:8px;background:#16202f;
+              border-right:1px solid #2b3d57;border-bottom:1px solid #2b3d57;
+              left:var(--ax,50%);margin-left:-4px}
+  #tip.up::after{bottom:-5px;transform:rotate(45deg)}
+  #tip.dn::after{top:-5px;transform:rotate(-135deg)}
+  #tip.lf::after{left:auto;right:-5px;margin-left:0;top:var(--ay,50%);margin-top:-4px;
+                 transform:rotate(-45deg)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <span class="lg">∂ₜu</span>
+    <!-- свой список: у нативного <option> нет hover-событий, а превью нужно по наведению.
+         Скрытый <select id="preset"> остаётся хранилищем значения (-1 = «своё уравнение»). -->
+    <div id="presetbox">
+      <button id="presetbtn" aria-haspopup="listbox"
+        data-tip="Готовые уравнения|Выбор подставит уравнение, сетку и начальные данные. Наведи на пункт — справа покажется формула"></button>
+      <div id="plist" role="listbox"></div>
+      <select id="preset" hidden></select>
+    </div>
+    <div id="eqbox">
+      <pre id="eqhl" aria-hidden="true"></pre>
+      <!-- rows=1: иначе «height:auto» в autosizeEq() упирается в дефолтные две строки -->
+      <textarea id="eq" rows="1" spellcheck="false">ut + u*ux + uxxx = 0</textarea>
+    </div>
+    <div class="hcol">
+      <button id="apply">Применить (Ctrl+↵)</button>
+    </div>
+    <div id="msg"><span id="err"></span><span id="warn"></span></div>
+  </header>
+
+  <main>
+    <div id="plots">
+      <div class="cwrap" id="pw">
+        <canvas id="plot"></canvas>
+        <div class="tag">u(x, t)</div>
+        <div id="hint">тяни мышью: ↕ амплитуда, ↔ ширина · колесо — ширина · Alt — добавить</div>
+      </div>
+      <div class="cwrap" id="xw">
+        <canvas id="xt"></canvas>
+        <div class="tag" id="xtag">диаграмма x–t (время вниз)</div>
+      </div>
+    </div>
+
+    <aside>
+      <section class="isl">
+      <h3>Управление</h3>
+      <div class="grid3">
+        <button id="play" class="big" data-tip="Пуск / пауза|Пробел на клавиатуре делает то же самое">▶</button>
+        <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз — не дожидаясь анимации">⏭</button>
+        <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
+      </div>
+      <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="200" step="1"></div>
+      <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
+      <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
+      <button id="smooth" style="width:100%;margin-top:4px"
+        data-tip="Гасить осцилляции опрокидывания|Когда горб опрокидывается, решение становится разрывным, а ряд Фурье отвечает на разрыв пилой на всю сетку. Кнопка добавляет гипервязкость в верхушку спектра — пила гаснет, разрыв размазывается на пару ячеек. Это меняет задачу: смотри «гашение» в диагностике.">∿ гасить осцилляции</button>
+      </section>
+
+      <section class="isl">
+      <h3>Диагностика</h3>
+      <div id="diag"></div>
+      <div id="status"></div>
+      </section>
+
+      <section class="isl">
+      <h3>Поля</h3>
+      <div id="chips"></div>
+      <div class="note">клик — выбрать поле для рисования, кружок — показать/скрыть</div>
+      </section>
+
+      <section class="isl">
+      <h3>Начальные данные <span id="selname" style="color:var(--accent);float:right"></span></h3>
+      <div id="tools"><!-- кнопки-миниатюры строит app.js --></div>
+      <div class="row"><label>ширина</label><input type="number" id="wid" value="2" step="0.1" min="0.01"></div>
+      <div class="row"><label>край</label><input type="number" id="edge" value="0.4" step="0.05" min="0.01"
+        title="сглаживание фронта ступеньки"></div>
+      <label class="chk"><input type="checkbox" id="addm">складывать с текущим (Alt)</label>
+      <label class="chk"><input type="checkbox" id="live">рисовать на ходу (не сбрасывать t)</label>
+      <div class="grid2" style="margin-top:6px">
+        <button id="zero">обнулить</button>
+        <button id="rand">случайно</button>
+      </div>
+      </section>
+
+      <section class="isl">
+      <h3>Параметры уравнения</h3>
+      <div id="pars"><div class="note">нет — добавь буквенный коэффициент, например <code>ut + u*ux = nu*uxx</code></div></div>
+      </section>
+
+      <section class="isl">
+      <h3>Сетка</h3>
+      <div class="row"><label>узлов N</label>
+        <select id="N"><option>128</option><option>256</option><option selected>512</option><option>1024</option><option>2048</option></select></div>
+      <div class="row"><label>период L</label><input type="number" id="L" value="40" step="1" min="1"></div>
+      </section>
+
+      <section class="isl">
+      <h3>Вид</h3>
+      <label class="chk"><input type="checkbox" id="autoy" checked>автомасштаб по u</label>
+      <div class="row"><label>u от … до</label></div>
+      <div class="grid2"><input type="number" id="ymin" value="-1" step="0.5" style="width:100%">
+        <input type="number" id="ymax" value="4" step="0.5" style="width:100%"></div>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" id="showic" checked>показывать начальное условие</label>
+      </section>
+
+      <section class="isl">
+      <h3>Шпаргалка</h3>
+      <div class="note">
+        Каждое уравнение — с новой строки. Поля — <b>одиночные буквы</b>, у которых есть
+        производная по времени: <code>ut</code>, <code>vt</code>, <code>ztt</code>.
+        Порядок по времени любой: <code>utt</code>, <code>uttt</code> — понижается автоматически,
+        появляются компоненты <code>ut</code>, <code>utt</code> с собственными начальными данными.<br>
+        По x: <code>ux, uxx, uxxx…</code>. Умножение можно опускать:
+        <code>uvvxxux</code> = <code>u*v*vxx*ux</code>.<br>
+        Остальные буквы — константы с ползунком (логарифмическая шкала).
+        Ещё есть <code>x, t, pi</code>, функции <code>sin cos exp tanh sech abs sqrt</code>,
+        степени <code>u^2</code>. Границы периодические.<br>
+        <kbd>пробел</kbd> пуск/пауза · <kbd>R</kbd> сброс (счёт останавливается)
+      </div>
+      </section>
+    </aside>
+  </main>
+</div>
+
+<div id="tip"></div>
+<div id="eqprev"></div>
+
+<script src="core.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
