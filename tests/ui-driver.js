@@ -622,10 +622,14 @@ steps.push(() => {
   ck('порог телефона в CSS и в app.js совпадает', !!cond && norm(cond) === norm(D.MOB),
      cond + '  vs  ' + D.MOB);
 
-  ck('на широком экране пульт живёт в «Управлении»', $('padbtns').parentNode.id === 'ctlhome',
+  ck('пульт живёт в нижней строке', $('padbtns').parentNode.id === 'bar',
      $('padbtns').parentNode.id);
-  ck('нижняя строка телефона на десктопе скрыта', getComputedStyle($('bar')).display === 'none',
+  ck('нижняя строка есть и на десктопе', getComputedStyle($('bar')).display === 'flex',
      getComputedStyle($('bar')).display);
+  ck('на широком экране скорость — в нижней строке', $('speedbox').parentNode.id === 'barspd',
+     $('speedbox').parentNode.id);
+  ck('кнопка шторки на десктопе скрыта', getComputedStyle($('gear')).display === 'none',
+     getComputedStyle($('gear')).display);
   ck('панель справа — не шторка',
      getComputedStyle(document.querySelector('aside')).position === 'static',
      getComputedStyle(document.querySelector('aside')).position);

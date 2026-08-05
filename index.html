@@ -196,9 +196,8 @@
   #diag table{border-collapse:collapse;width:100%}
   #diag td{padding:1px 0}
   #diag td.n{color:var(--dim);width:34%}
-  .big{padding:6px 0}
   /* пульт: размер иконки задаём мы, а не шрифт (см. ICON в app.js) */
-  #padbtns svg{display:block;width:22px;height:22px;margin:0 auto}
+  #padbtns svg{display:block;width:18px;height:18px;margin:0 auto}
   .note{color:var(--dim);font-size:11px;line-height:1.5;margin-top:6px}
   kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;
       border-radius:4px;padding:0 4px;font-size:11px;font-family:inherit}
@@ -243,7 +242,29 @@
      На десктопе всего этого нет вовсе. */
   /* NB: имя не `.sh` — этот класс уже занят кривой в миниатюрах инструментов
      (`toolIcon`), и общее правило `display:none` погасило бы все семь профилей */
-  #bar,#scrim,#sheeth{display:none}
+  #scrim,#sheeth{display:none}
+
+  /* ================= нижняя строка =================
+     Общая для всех экранов, а не телефонная: пульт и показания счёта не относятся
+     ни к одной группе настроек и нужны всегда, поэтому живут отдельно от панели.
+     Слева — чем управляют (пуск, шаг, сброс, скорость), справа — что получается
+     (время, Δ за шаг, темп счёта, тревоги). На телефоне сюда же приезжает кнопка
+     шторки, а скорость, наоборот, уезжает в шторку — места в строке нет. */
+  :root{--barh:32px}
+  #bar{display:flex;align-items:center;gap:14px;flex:none;z-index:90;
+       padding:5px 10px;background:var(--panel);border-top:1px solid var(--line)}
+  #padbtns{display:flex;gap:5px;flex:none}
+  #bar button{height:var(--barh)}
+  #padbtns button{width:44px;padding:0}
+  #barspd{flex:none}
+  #barspd .row{margin:0;flex-wrap:nowrap}
+  #barspd .row>label{min-width:0}
+  #barspd .seg{flex:none}
+  #barspd .seg button{padding:0 9px}
+  #bart{flex:1;min-width:0;color:var(--dim);
+        font:12px/1.25 "Cascadia Mono",Consolas,monospace;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #gear{display:none}
 
   /* Порог телефона повторён в app.js (`MOB`) — стили и переезд пульта обязаны
      переключаться на одном и том же месте, иначе пульт окажется в двух местах
@@ -295,18 +316,15 @@
            opacity:0;pointer-events:none;transition:opacity .22s}
     #scrim.on{opacity:1;pointer-events:auto}
 
-    /* нижняя строка */
-    #bar{display:flex;align-items:center;gap:7px;flex:none;z-index:90;
-         padding:5px 8px calc(5px + env(safe-area-inset-bottom,0px));
-         background:var(--panel);border-top:1px solid var(--line)}
-    #barctl{display:flex;flex:none}
-    #barctl>#padbtns{display:flex;gap:6px}
-    #barctl button{width:50px;height:var(--barh);padding:0}
+    /* нижняя строка: та же, но крупнее под палец, с кнопкой шторки и без скорости —
+       шесть кнопок «×N» в строку не помещаются, они уезжают в шторку (relayout) */
+    #bar{gap:7px;padding:5px 8px calc(5px + env(safe-area-inset-bottom,0px))}
+    #padbtns{gap:6px}
+    #padbtns button{width:50px}
     #padbtns svg{width:24px;height:24px}
-    #bart{flex:1;min-width:0;text-align:center;color:var(--dim);
-          font:12px/1.25 "Cascadia Mono",Consolas,monospace;
-          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    #gear{flex:none;height:var(--barh);padding:0 14px;font-size:16px}
+    #barspd{display:none}
+    #bart{text-align:center}
+    #gear{display:block;flex:none;padding:0 14px;font-size:16px}
 
     /* пальцем целятся хуже, чем мышью: всё, во что надо попасть, крупнее */
     aside button{min-height:34px}
@@ -392,15 +410,9 @@
 
       <section class="isl">
       <h3>Управление</h3>
-      <!-- #ctlhome — место пульта на десктопе; на телефоне relayout() переносит
-           сам узел #padbtns в нижнюю строку #barctl и обратно -->
-      <div id="ctlhome"><div class="grid3" id="padbtns">
-        <button id="play" class="big" data-tip="Пуск / пауза|Пробел на клавиатуре делает то же самое">▶</button>
-        <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз, вручную. Счёт при этом встаёт на паузу — чтобы кадр можно было разглядеть">⏭</button>
-        <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
-      </div></div>
-      <div class="row"><label>скорость</label><div id="speed" class="seg"
-        data-tip="Скорость счёта|Во сколько раз быстрее идёт модельное время. Это шаги на кадр, точность от них не зависит. Кадр всё равно обрывается по времени, так что «×50» на тяжёлой сетке — это не зависание, а просто меньше кадров в секунду."></div></div>
+      <!-- #spdhome — место скорости на телефоне: в нижней строке шесть кнопок «×N»
+           не помещаются, поэтому relayout() переносит сам узел #speedbox сюда -->
+      <div id="spdhome"></div>
       <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="2000" step="1"></div>
       <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
       <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
@@ -475,10 +487,16 @@
     </aside>
   </main>
 
-  <!-- нижняя строка телефона: пульт (переезжает сюда из «Управления»), самое нужное
-       из диагностики и кнопка шторки. На десктопе всей строки нет. -->
+  <!-- нижняя строка: пульт и показания счёта. Есть на всех экранах; на телефоне
+       к ней добавляется кнопка шторки, а скорость уезжает в шторку (relayout). -->
   <div id="bar">
-    <div id="barctl"></div>
+    <div id="padbtns">
+      <button id="play" data-tip="Пуск / пауза|Пробел на клавиатуре делает то же самое">▶</button>
+      <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз, вручную. Счёт при этом встаёт на паузу — чтобы кадр можно было разглядеть">⏭</button>
+      <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
+    </div>
+    <div id="barspd"><div id="speedbox" class="row"><label>скорость</label><div id="speed" class="seg"
+      data-tip="Скорость счёта|Во сколько раз быстрее идёт модельное время. Это шаги на кадр, точность от них не зависит. Кадр всё равно обрывается по времени, так что «×50» на тяжёлой сетке — это не зависание, а просто меньше кадров в секунду."></div></div></div>
     <div id="bart"></div>
     <button id="gear" data-tip="Настройки|Сетка, поля, начальные данные, параметры, диагностика — всё здесь">⚙</button>
   </div>
