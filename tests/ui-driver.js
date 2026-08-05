@@ -213,8 +213,9 @@ steps.push(() => {
   $('play').click();
   ck('пуск идёт', D.S.running);
   $('reset').click();
-  ck('сброс останавливает счёт', !D.S.running && $('play').textContent === '▶',
-     'running=' + D.S.running + ' знак=' + $('play').textContent);
+  // иконка теперь svg, состояние кнопки видно по data-icon (см. syncPlay)
+  ck('сброс останавливает счёт', !D.S.running && $('play').dataset.icon === 'play',
+     'running=' + D.S.running + ' значок=' + $('play').dataset.icon);
   ck('сброс вернул t=0', D.sim.t === 0, 't=' + D.sim.t);
 });
 
@@ -297,12 +298,13 @@ steps.push(() => {
   ck('счёт идёт до рисования', D.S.running);
   ev('pointerdown', r.left + r.width*0.5, r.top + D.u2py(1));
   ck('нажатие мыши ставит счёт на паузу',
-     !D.S.running && $('play').textContent === '▶', 'знак=' + $('play').textContent);
+     !D.S.running && $('play').dataset.icon === 'play', 'значок=' + $('play').dataset.icon);
   const t0 = D.sim.t;
   ev('pointermove', r.left + r.width*0.5 + 40, r.top + D.u2py(2));
   ck('пока кнопка нажата, время стоит', D.sim.t === t0, 't=' + D.sim.t);
   ev('pointerup', r.left + r.width*0.5 + 40, r.top + D.u2py(2));
-  ck('после отпускания счёт продолжается', D.S.running && $('play').textContent === '❚❚');
+  ck('после отпускания счёт продолжается', D.S.running && $('play').dataset.icon === 'pause',
+     'значок=' + $('play').dataset.icon);
   $('play').click();
   ck('остановка руками остаётся остановкой', !D.S.running);
 });
@@ -549,6 +551,58 @@ steps.push(() => {
   ck('перо рисует', umax(0)>0.5, 'max='+umax(0).toFixed(3));
   for (let i=0;i<50;i++) D.sim.step();
   ck('после пера считается', D.sim.diagnostics().finite);
+});
+
+/* --- иконки, кнопка в поле, строка сообщений --- */
+steps.push(() => {
+  // Смотрим на саму кривую, а не на рамку svg: класс `.sh` у неё общий с чем
+  // угодно в проекте, и одного чужого правила `display:none` хватает, чтобы
+  // остались пустые кнопки (так и случилось с шапкой шторки).
+  const bad = [...$('tools').querySelectorAll('button')].filter(b => {
+    const s = b.querySelector('svg'), p = b.querySelector('path.sh');
+    if (!s || !p || getComputedStyle(p).display === 'none') return true;
+    // по длине пути, а не по высоте рамки: у «константы» профиль — прямая,
+    // и высота у неё честно ноль
+    return s.getBoundingClientRect().width < 12 ||
+           p.getBBox().width < 20 || p.getTotalLength() < 20;
+  });
+  ck('профили на кнопках инструментов нарисованы', bad.length === 0,
+     bad.map(b => b.dataset.tool).join() || 'все ' + $('tools').children.length);
+  const pad = [...document.querySelectorAll('#padbtns button')];
+  ck('у кнопок пульта рисованные значки',
+     pad.length === 3 && pad.every(b => b.querySelector('svg') &&
+       b.querySelector('svg').getBoundingClientRect().width > 10),
+     pad.map(b => b.id).join());
+
+  const eb = $('eqbox').getBoundingClientRect(), ab = $('apply').getBoundingClientRect();
+  ck('«применить» лежит внутри поля ввода',
+     $('eqbox').contains($('apply')) && ab.right <= eb.right + 1 && ab.left > eb.left,
+     'eqbox ' + eb.left.toFixed(0) + '..' + eb.right.toFixed(0) +
+     ', кнопка ' + ab.left.toFixed(0) + '..' + ab.right.toFixed(0));
+  // кнопка отъела правый отступ — у слоёв он обязан остаться одинаковым,
+  // иначе перенос строк разойдётся и раскраска уедет от каретки
+  const cs = getComputedStyle($('eq')), ch = getComputedStyle($('eqhl'));
+  ck('отступы поля и подложки совпадают',
+     cs.padding === ch.padding && cs.paddingRight === ch.paddingRight,
+     cs.padding + '  vs  ' + ch.padding);
+  ck('текст не заезжает под кнопку', parseFloat(cs.paddingRight) >= ab.width,
+     'padding-right=' + cs.paddingRight + ', кнопка ' + ab.width.toFixed(0) + 'px');
+});
+
+steps.push(() => {
+  ck('без ошибок строка сообщений скрыта', getComputedStyle($('msg')).display === 'none',
+     getComputedStyle($('msg')).display);
+  $('eq').value = 'ut = uxxx*'; $('eq').dispatchEvent(new Event('input'));
+  ck('с ошибкой строка сообщений видна', getComputedStyle($('msg')).display !== 'none');
+  const mr = $('msg').getBoundingClientRect(), er = $('eq').getBoundingClientRect();
+  // не просто «где-то ниже», а точно под полем: у края шапки его искать неудобно,
+  // с этого и началась правка
+  ck('сообщение — прямо под полем ввода',
+     mr.top >= er.bottom - 1 && Math.abs(mr.left - er.left) < 6,
+     'msg ' + mr.left.toFixed(0) + '/' + mr.top.toFixed(0) +
+     '  eq ' + er.left.toFixed(0) + '/' + er.bottom.toFixed(0));
+  setEq('ut + u*ux + uxxx = 0');
+  ck('строка сообщений снова скрыта', getComputedStyle($('msg')).display === 'none');
 });
 
 /* --- телефонная раскладка ---

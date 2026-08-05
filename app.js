@@ -125,6 +125,26 @@ function toolIcon(id) {
          '<path class="sh" d="' + d + '"/>' + nib + '</svg>';
 }
 
+/* Иконки пульта и «применить» — рисованные, а не юникодные глифы. Глифы взяли не
+   из того шрифта: ⏭ система считает эмодзи и рисует цветной картинкой с подложкой,
+   ⟲ приходит из запасного шрифта и выходит вдвое мельче соседей. У svg такой
+   зависимости нет — размер и цвет задаём мы. */
+const ICON = {
+  play:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.5 4.2 19 12 6.5 19.8z"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="currentColor">' +
+         '<rect x="6.6" y="4.5" width="4" height="15" rx="1"/>' +
+         '<rect x="13.4" y="4.5" width="4" height="15" rx="1"/></svg>',
+  step:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.5 4.2 15 12 4.5 19.8z"/>' +
+         '<rect x="16.6" y="4.2" width="3.2" height="15.6" rx="1"/></svg>',
+  reset: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+         'stroke-linecap="round" stroke-linejoin="round">' +
+         '<polyline points="2.5 4.5 2.5 10.5 8.5 10.5"/>' +
+         '<path d="M5 15a8.5 8.5 0 1 0 2-8.8l-4.5 4.3"/></svg>',
+  apply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+         'stroke-linecap="round" stroke-linejoin="round">' +
+         '<path d="M20 5.5v5a3 3 0 0 1-3 3H5"/><polyline points="9.5 10 5 13.5 9.5 17"/></svg>'
+};
+
 const TOOLS = [
   { id:'sech',  name:'Шапочка',   tip:'sech²-горб — профиль солитона КдФ. Тянуть ↕ амплитуда, ↔ ширина' },
   { id:'gauss', name:'Гаусс',     tip:'Колокол exp(−(x/w)²) — гладкий, без длинных хвостов' },
@@ -465,6 +485,7 @@ function showWarnings(m) {
   const msgs = m.warnings.slice();
   if (w) msgs.push(w.comp + ': неустойчиво при больших k (рост ' + w.growth.toPrecision(3) + ')');
   $('warn').innerHTML = msgs.map(s => '⚠ ' + s).join('<br>');
+  syncMsg();
 }
 
 /** только смена значения константы: структура та же, DOM ползунков не трогаем */
@@ -584,6 +605,14 @@ function showError(e) {
   $('err').textContent = e ? e.message : '';
   $('eq').classList.toggle('bad', !!e);
   paintEq(e);
+  syncMsg();
+}
+
+/** строка сообщений живёт под полем ввода — там, где текст, из-за которого она
+    появилась. Пустую убираем целиком: иначе пустая строка вместе с отступом
+    шапки навсегда съедала бы высоту у графика. Холст подгонит ResizeObserver. */
+function syncMsg() {
+  $('msg').classList.toggle('on', !!($('err').textContent || $('warn').textContent));
 }
 
 /** подложка #eqhl: раскрашенная копия текста поля, поверх — метка ошибки */
@@ -1112,7 +1141,17 @@ function penDot(u, px0, py0, px1, py1) {
 }
 
 /* ================= кнопки ================= */
-function syncPlay(){ $('play').textContent = S.running ? '❚❚' : '▶'; $('play').classList.toggle('on', S.running); }
+/* data-icon — то, по чему видно состояние кнопки снаружи (в том числе тесту):
+   у svg нет textContent, а раньше проверяли именно его */
+function syncPlay(){
+  const k = S.running ? 'pause' : 'play';
+  $('play').dataset.icon = k;
+  $('play').innerHTML = ICON[k];
+  $('play').classList.toggle('on', S.running);
+}
+$('stepb').innerHTML = ICON.step;
+$('reset').innerHTML = ICON.reset;
+$('apply').innerHTML = ICON.apply;
 
 function setSmooth(on) {
   S.smooth = !!on;
@@ -1242,12 +1281,22 @@ PRESETS.forEach((p, i) => {
   plist.appendChild(d);
 });
 
-/** превью формулы — справа от списка, по вертикали у самого пункта */
+/** превью формулы — справа от списка, по вертикали у самого пункта.
+    На телефоне справа места нет, поэтому превью ложится внизу экрана во всю
+    ширину и получает кнопку «выбрать»: тап по пункту показывает формулу, а не
+    применяет её сразу — иначе вёрстку формулы на телефоне никто бы не увидел. */
 function showPrev(i) {
   const el = itemAt(i); if (!el) return;
-  eqprev.innerHTML = prettyEq(PRESETS[i].eq);
+  const phone = mob.matches;
+  eqprev.innerHTML = prettyEq(PRESETS[i].eq) +
+    (phone ? '<button class="pick" data-i="' + i + '">выбрать</button>' : '');
   fitMath(eqprev);                     // скобки рисуются по уже измеренной высоте
+  eqprev.classList.toggle('phone', phone);
   eqprev.classList.add('on');
+  if (phone) {                         // место и размер задаёт CSS, инлайн — снять
+    eqprev.style.left = ''; eqprev.style.top = '';
+    return;
+  }
   const lr = plist.getBoundingClientRect(), ir = el.getBoundingClientRect();
   const w = eqprev.offsetWidth, h = eqprev.offsetHeight;
   const right = lr.right + 10;
@@ -1262,9 +1311,7 @@ function markHi() {
     el.classList.toggle('hi', i === hiIdx);
     el.classList.toggle('cur', i === +sel.value);
   });
-  // на телефоне превью не показываем: справа от списка нет места, а после выбора
-  // формула всё равно окажется в поле ввода
-  if (hiIdx >= 0 && !mob.matches) showPrev(hiIdx); else hidePrev();
+  if (hiIdx >= 0) showPrev(hiIdx); else hidePrev();
 }
 
 function openList(on) {
@@ -1287,13 +1334,25 @@ plist.addEventListener('pointerover', e => {
   const it = e.target.closest('.pitem');
   if (it) { hiIdx = +it.dataset.i; markHi(); }
 });
-plist.addEventListener('pointerleave', hidePrev);
+// на телефоне палец уходит с пункта сразу после тапа — превью не должно гаснуть
+plist.addEventListener('pointerleave', () => { if (!mob.matches) hidePrev(); });
 plist.addEventListener('click', e => {
   const it = e.target.closest('.pitem');
-  if (it) choose(+it.dataset.i);
+  if (!it) return;
+  const i = +it.dataset.i;
+  // телефон: первый тап показывает формулу, второй по тому же пункту — применяет
+  if (mob.matches && hiIdx !== i) { hiIdx = i; markHi(); return; }
+  choose(i);
+});
+eqprev.addEventListener('click', e => {
+  const b = e.target.closest('.pick');
+  if (b) choose(+b.dataset.i);
 });
 document.addEventListener('pointerdown', e => {
-  if (isOpen() && !$('presetbox').contains(e.target)) openList(false);
+  // превью с кнопкой «выбрать» лежит вне #presetbox — по нему список не закрываем,
+  // иначе кнопка исчезнет из-под пальца ещё до click
+  if (isOpen() && !$('presetbox').contains(e.target) && !eqprev.contains(e.target))
+    openList(false);
 });
 pbtn.addEventListener('keydown', e => {
   if (e.key === 'Escape') { openList(false); return; }
@@ -1379,6 +1438,10 @@ mob.addEventListener('change', () => { relayout(); fitCanvas(); draw(); });
 
 /* ================= старт ================= */
 relayout();
+/* холст меняет размер не только вместе с окном: появилась строка ошибки — выросла
+   шапка, открылась шторка, вылезла экранная клавиатура. ResizeObserver ловит все
+   случаи одинаково, вместо ручного fitCanvas() из каждого такого места. */
+new ResizeObserver(() => { fitCanvas(); draw(); }).observe($('pw'));
 window.addEventListener('resize', () => { fitCanvas(); autosizeEq(); draw(); });
 fitCanvas();
 loadPreset(PRESETS[0]);

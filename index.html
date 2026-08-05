@@ -26,9 +26,13 @@
   /* поле ввода: прозрачный textarea поверх подложки — весь видимый текст (раскраска
      и метка ошибки) рисуется на подложке. Шрифт, паддинг, рамка и правила переноса
      у них обязаны совпадать, иначе раскраска уедет относительно каретки. */
-  #eqbox{position:relative;flex:1;min-width:180px}
+  #eqbox{flex:1;min-width:180px}
+  #eqfield{position:relative}
+  /* правый отступ — место под кнопку «применить» внутри поля. Он одинаков у обоих
+     слоёв и на всех строках: перенос обязан считаться в них одинаково, иначе
+     раскраска уедет относительно каретки */
   #eq,#eqhl{display:block;width:100%;margin:0;border:1px solid var(--line);border-radius:6px;
-      padding:7px 10px;font:14px/1.5 "Cascadia Mono",Consolas,monospace;
+      padding:7px 42px 7px 10px;font:14px/1.5 "Cascadia Mono",Consolas,monospace;
       white-space:pre-wrap;overflow-wrap:break-word}
   /* высоту задаёт autosizeEq() в app.js; max-height — предохранитель на длинную систему */
   #eq{position:relative;z-index:1;background:transparent;color:transparent;
@@ -38,7 +42,10 @@
         border-color:transparent;pointer-events:none;overflow:hidden}
   #eq:focus{outline:none;border-color:var(--accent)}
   #eq.bad,#eq.bad:focus{border-color:var(--bad)}
-  #eqhl .mk{background:rgba(255,107,107,.2);border-radius:3px;
+  /* виноватый кусок прямо в поле: заливка, рамка и волна. Ни жирного, ни другого
+     кегля — это сдвинуло бы текст относительно каретки (см. правило ниже) */
+  #eqhl .mk{background:rgba(255,107,107,.26);border-radius:3px;
+            box-shadow:0 0 0 1px rgba(255,107,107,.5);
             text-decoration:underline wavy var(--bad);text-decoration-skip-ink:none;
             text-underline-offset:3px}
   /* раскраска ввода: поля — цветом своей кривой (задаётся на месте), остальное здесь.
@@ -105,11 +112,19 @@
         vertical-align:middle;font-size:.92em;margin:0 .16em}
   .frac>span{padding:0 .3em;line-height:1.25}
   .frac>.fnum{border-bottom:1px solid currentColor}
-  .hcol{display:flex;flex-direction:column;gap:5px;flex:none}
-  #apply{white-space:nowrap}
+  /* кнопка «применить» внутри поля, у правого края последней строки */
+  #apply{position:absolute;right:5px;bottom:5px;z-index:2;
+         width:30px;height:26px;padding:0;display:flex;align-items:center;
+         justify-content:center;border-radius:6px}
+  #apply svg{display:block;width:17px;height:17px}
+  /* активна — подсвечена, как «отправить» в мессенджере: единственное место,
+     где видно, что написанное ещё не применено */
+  #apply:not(:disabled){background:#12384a;border-color:var(--accent);color:var(--accent)}
+  #apply:not(:disabled):hover{background:#17506b;color:#fff}
   button:disabled{opacity:.42;cursor:default}
   button:disabled:hover{border-color:var(--line);color:var(--txt)}
-  #msg{flex:none;max-width:26ch;font-size:11px;line-height:1.4}
+  #msg{display:none;font-size:11px;line-height:1.4;margin-top:4px;padding-left:2px}
+  #msg.on{display:block}
   #err{color:var(--bad)}
   #warn{color:var(--accent2)}
 
@@ -117,7 +132,6 @@
     header{align-items:stretch}
     header .lg{display:none}
     #presetbox{order:-1;width:100%;flex:1 0 100%}   /* на узком экране селект сверху */
-    #msg{max-width:none;flex:1 0 100%}
   }
 
   button,select,input[type=number],input[type=text]{
@@ -178,18 +192,24 @@
   #diag table{border-collapse:collapse;width:100%}
   #diag td{padding:1px 0}
   #diag td.n{color:var(--dim);width:34%}
-  .big{font-size:16px;padding:6px 0}
+  .big{padding:6px 0}
+  /* пульт: размер иконки задаём мы, а не шрифт (см. ICON в app.js) */
+  #padbtns svg{display:block;width:22px;height:22px;margin:0 auto}
   .note{color:var(--dim);font-size:11px;line-height:1.5;margin-top:6px}
   kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;
       border-radius:4px;padding:0 4px;font-size:11px;font-family:inherit}
 
   /* кнопки начальных данных — миниатюры профиля */
   #tools{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
-  #tools button{padding:3px 2px;height:36px;color:var(--dim);display:flex;
-                align-items:center;justify-content:center}
+  /* НЕ flex и НЕ height:100% у svg: миниатюра — единственная начинка кнопки, и её
+     высоту обязан задавать сам viewBox. Проценты от флекс-элемента часть браузеров
+     (мобильный Safari) считает от нуля, и на телефоне вместо профилей оставались
+     пустые рамки. width:100% + height:auto работает везде: высота берётся из
+     пропорций viewBox, кнопка растёт под неё. */
+  #tools button{display:block;padding:4px 3px;color:var(--dim)}
   #tools button:hover{color:var(--txt)}
   #tools button.on{background:#12384a;border-color:var(--accent);color:var(--accent)}
-  #tools svg{display:block;width:100%;height:100%}
+  #tools svg{display:block;width:100%;height:auto}
   #tools svg .zero{stroke:currentColor;opacity:.25;stroke-width:1;stroke-dasharray:2 3}
   #tools svg .sh{fill:none;stroke:currentColor;stroke-width:2;
                  stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
@@ -217,7 +237,9 @@
      в шторку снизу, а наверху остаётся только то, без чего нельзя ни секунды —
      пульт (пуск/шаг/сброс), время и кнопка шторки. Эти три части и есть #bar.
      На десктопе всего этого нет вовсе. */
-  #bar,#scrim,.sh{display:none}
+  /* NB: имя не `.sh` — этот класс уже занят кривой в миниатюрах инструментов
+     (`toolIcon`), и общее правило `display:none` погасило бы все семь профилей */
+  #bar,#scrim,#sheeth{display:none}
 
   /* Порог телефона повторён в app.js (`MOB`) — стили и переезд пульта обязаны
      переключаться на одном и том же месте, иначе пульт окажется в двух местах
@@ -227,18 +249,17 @@
     :root{--barh:50px}
 
     header{padding:6px 8px;gap:6px}
-    /* строка 1: список задач и «Применить» рядом, строка 2: поле, строка 3: ошибки.
-       Отдельная строка ради одной кнопки на телефоне непозволительна. */
-    #presetbox{width:auto;flex:1 1 auto;min-width:0;order:-1}
+    /* строка 1: список задач, строка 2: поле с кнопкой внутри, строка 3: ошибки
+       (её нет, пока всё в порядке) */
+    #presetbox{width:100%;flex:1 0 100%;min-width:0;order:-1}
     #presetbtn{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-    .hcol{order:-1}
     #eqbox{flex:1 0 100%;min-width:0}
     /* кегль меньше 16px iOS считает поводом зазумить страницу на фокусе, и обратно
        она уже не отъезжает — поэтому поле ввода на телефоне крупнее, а не мельче */
     #eq,#eqhl{font-size:16px}
     #eq{max-height:32vh}
-    #apply .kb{display:none}
-    #msg{flex:1 0 100%;max-width:none}      /* пусто — строка схлопывается в ноль */
+    #apply{width:34px;height:30px}          /* пальцем целиться труднее, чем мышью */
+    #apply svg{width:19px;height:19px}
 
     #plots{padding:6px;gap:6px}
     #pw{min-height:120px}
@@ -258,14 +279,14 @@
           transform:translateY(calc(100% + var(--barh) + 40px));
           transition:transform .22s ease;overscroll-behavior:contain}
     aside.open{transform:none}
-    .sh{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:3;
-        margin:0 -10px 8px;padding:13px 12px 8px;background:var(--panel);
-        border-bottom:1px solid var(--line)}
-    .sh .grab{position:absolute;left:50%;top:5px;width:34px;height:4px;margin-left:-17px;
-              border-radius:2px;background:#2b3d57}
-    .sh b{font-weight:600;font-size:11px;letter-spacing:1.2px;
-          text-transform:uppercase;color:var(--dim)}
-    .sh button{margin-left:auto;padding:3px 11px}
+    #sheeth{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:3;
+            margin:0 -10px 8px;padding:13px 12px 8px;background:var(--panel);
+            border-bottom:1px solid var(--line)}
+    #sheeth .grab{position:absolute;left:50%;top:5px;width:34px;height:4px;margin-left:-17px;
+                  border-radius:2px;background:#2b3d57}
+    #sheeth b{font-weight:600;font-size:11px;letter-spacing:1.2px;
+              text-transform:uppercase;color:var(--dim)}
+    #sheeth button{margin-left:auto;padding:3px 11px}
     #scrim{display:block;position:fixed;inset:0;z-index:70;background:rgba(4,7,12,.55);
            opacity:0;pointer-events:none;transition:opacity .22s}
     #scrim.on{opacity:1;pointer-events:auto}
@@ -276,8 +297,8 @@
          background:var(--panel);border-top:1px solid var(--line)}
     #barctl{display:flex;flex:none}
     #barctl>#padbtns{display:flex;gap:6px}
-    #barctl button{width:50px;height:var(--barh);padding:0;font-size:15px}
-    #barctl #play{font-size:17px}
+    #barctl button{width:50px;height:var(--barh);padding:0}
+    #padbtns svg{width:24px;height:24px}
     #bart{flex:1;min-width:0;text-align:center;color:var(--dim);
           font:12px/1.25 "Cascadia Mono",Consolas,monospace;
           white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -289,11 +310,18 @@
     aside input[type=number]{width:88px;padding:7px 9px}
     aside select{padding:7px 6px}
     aside input[type=range]{height:28px}
-    #tools button{height:44px}
+    #tools button{padding:6px 4px}          /* высоту задаёт сама миниатюра */
     .chk{margin:9px 0}
     .chk input{width:18px;height:18px}
     .chip{padding:6px 11px}
     .par .top button{padding:4px 9px}
+
+    /* превью формулы: справа от списка места нет, поэтому внизу во всю ширину,
+       с кнопкой выбора. pointer-events нужны — по нему теперь нажимают */
+    #eqprev.phone{left:8px;right:8px;top:auto;bottom:calc(var(--barh,50px) + 10px);
+                  max-width:none;max-height:52vh;overflow:auto;pointer-events:auto}
+    #eqprev .pick{display:block;width:100%;margin-top:11px;padding:9px;
+                  background:#12384a;border-color:var(--accent);color:#fff}
 
     #tip{max-width:min(280px,86vw)}
   }
@@ -301,11 +329,10 @@
   /* телефон лёжа: тесно по высоте, поэтому подсказка на графике убирается,
      а диаграмма x–t ужимается — но не пропадает, ради неё половину задач и смотрят */
   @media (max-height:480px) and (max-width:1000px){
-    /* лёжа ширины хватает, чтобы собрать всю шапку в одну строку: список, поле,
-       «Применить». Каждая сэкономленная строка шапки — это +35px графику */
-    #presetbox{flex:1 1 170px}
+    /* лёжа ширины хватает, чтобы собрать шапку в одну строку: список и поле рядом.
+       Каждая сэкономленная строка шапки — это +35px графику */
+    #presetbox{width:auto;flex:1 1 170px}
     #eqbox{flex:2 1 230px}
-    .hcol{order:0}
     #hint{display:none}
     #xw{height:30%;min-height:52px}
     #eq{max-height:22vh}
@@ -326,15 +353,20 @@
       <select id="preset" hidden></select>
     </div>
     <div id="eqbox">
-      <pre id="eqhl" aria-hidden="true"></pre>
-      <!-- rows=1: иначе «height:auto» в autosizeEq() упирается в дефолтные две строки -->
-      <textarea id="eq" rows="1" spellcheck="false">ut + u*ux + uxxx = 0</textarea>
+      <!-- #eqfield — то, по чему растягивается подложка (inset:0). Сообщения лежат
+           ниже, внутри #eqbox, чтобы вставать точно под полем, а не у края шапки -->
+      <div id="eqfield">
+        <pre id="eqhl" aria-hidden="true"></pre>
+        <!-- rows=1: иначе «height:auto» в autosizeEq() упирается в дефолтные две строки -->
+        <textarea id="eq" rows="1" spellcheck="false">ut + u*ux + uxxx = 0</textarea>
+        <!-- «отправить», как в мессенджере: кнопка живёт внутри поля, а не отдельно
+             сбоку. Иконку ставит app.js (ICON.apply) -->
+        <button id="apply" data-tip="Применить (Ctrl+↵)|Пересобрать систему по написанному тексту"></button>
+      </div>
+      <!-- пустая строка сообщений убирается целиком (класс .on), иначе она навсегда
+           занимала бы высоту вместе с отступом шапки -->
+      <div id="msg"><span id="err"></span><span id="warn"></span></div>
     </div>
-    <div class="hcol">
-      <!-- напоминание про Ctrl+↵ прячется на телефоне: там нет ни Ctrl, ни места -->
-      <button id="apply">Применить<span class="kb"> (Ctrl+↵)</span></button>
-    </div>
-    <div id="msg"><span id="err"></span><span id="warn"></span></div>
   </header>
 
   <main>
@@ -351,8 +383,8 @@
     </div>
 
     <aside>
-      <!-- шапка шторки: видна только на телефоне, где панель — выдвижная (см. .sh) -->
-      <div class="sh"><span class="grab"></span><b>Настройки</b><button id="sheetx">готово</button></div>
+      <!-- шапка шторки: видна только на телефоне, где панель — выдвижная (см. #sheeth) -->
+      <div id="sheeth"><span class="grab"></span><b>Настройки</b><button id="sheetx">готово</button></div>
 
       <section class="isl">
       <h3>Управление</h3>
