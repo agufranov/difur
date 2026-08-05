@@ -76,7 +76,7 @@ steps.push(() => {
   ck('utt принимается', $('err').textContent==='', $('err').textContent);
   ck('две компоненты u и ut', D.sim.model.comps.map(c=>c.name).join()==='u,ut',
      D.sim.model.comps.map(c=>c.name).join());
-  ck('фишки полей нарисованы', $('chips').children.length===2, $('chips').textContent);
+  ck('легенда рисует оба поля', $('legend').children.length===2, $('legend').textContent);
   const rng = $('pars').querySelector('input[type=range]');
   ck('параметр c с логарифмическим ползунком', /c/.test($('pars').textContent) && rng && rng.min==='-4',
      'min='+(rng||{}).min);
@@ -87,9 +87,9 @@ steps.push(() => {
   $('tools').querySelector('[data-tool="gauss"]').click();
   $('wid').value='2'; $('wid').dispatchEvent(new Event('input'));
   drag(0.5, 1);
-  const chips = $('chips').children;
-  chips[1].click();
-  ck('клик по фишке выбирает ut', D.S.sel===1, 'sel='+D.S.sel);
+  const rows = $('legend').children;
+  rows[1].click();
+  ck('клик по строке легенды выбирает ut', D.S.sel===1, 'sel='+D.S.sel);
   $('tools').querySelector('[data-tool="const"]').click();
   drag(0.5, 0.4);
   ck('ut задан константой 0.4', Math.abs(umax(1)-0.4)<0.02, 'max|ut|='+umax(1).toFixed(4));
@@ -119,7 +119,7 @@ steps.push(() => {
   ck('компоненты u,ut,v,z', D.sim.model.comps.map(c=>c.name).join()==='u,ut,v,z',
      D.sim.model.comps.map(c=>c.name).join());
   ck('V — константа с ползунком', /V/.test($('pars').textContent));
-  const cols = [...$('chips').children].map(c=>c.style.color);
+  const cols = [...$('legend').children].map(c=>c.style.color);
   ck('поля разного цвета', new Set(cols).size===3, cols.join(' '));
 });
 
@@ -352,11 +352,32 @@ steps.push(() => {
 steps.push(() => {
   const isl = document.querySelectorAll('aside .isl');
   const heads = [...document.querySelectorAll('aside h3')];
-  ck('разделы панели — острова', isl.length === 8, 'островов=' + isl.length);
-  ck('каждый заголовок внутри острова', heads.length === 8 && heads.every(h => h.closest('.isl')),
+  ck('разделы панели — острова', isl.length === 7, 'островов=' + isl.length);
+  ck('каждый заголовок внутри острова', heads.length === 7 && heads.every(h => h.closest('.isl')),
      'заголовков=' + heads.length);
   const bg = getComputedStyle(isl[0]).backgroundColor, asideBg = getComputedStyle($('app').querySelector('aside')).backgroundColor;
   ck('фон острова отличается от фона панели', bg !== asideBg, bg + ' vs ' + asideBg);
+});
+
+/* легенда: она лежит на графике, называет кривые и показывает их числа —
+   ради этого из панели убран целый остров «Поля» */
+steps.push(() => {
+  const lr = $('legend').getBoundingClientRect(), pr = $('pw').getBoundingClientRect();
+  ck('легенда лежит поверх графика',
+     lr.left >= pr.left && lr.right <= pr.right + 1 && lr.top >= pr.top && lr.bottom <= pr.bottom,
+     'legend ' + lr.left.toFixed(0) + '..' + lr.right.toFixed(0) +
+     '  pw ' + pr.left.toFixed(0) + '..' + pr.right.toFixed(0));
+  // полупрозрачная: сквозь неё должна быть видна кривая, иначе она вырезает
+  // кусок поля зрения и ничем не лучше острова в панели
+  const a = getComputedStyle($('legend')).backgroundColor.match(/[\d.]+/g);
+  ck('легенда полупрозрачная', a && a.length === 4 && +a[3] < 0.9,
+     getComputedStyle($('legend')).backgroundColor);
+  const v = $('legend').querySelector('.v');
+  ck('в легенде показания поля', /max/.test(v.textContent), v.textContent);
+  const before = v.textContent;
+  for (let i = 0; i < 3; i++) $('stepb').click();
+  ck('показания в легенде живые', $('legend').querySelector('.v').textContent !== before,
+     before + ' -> ' + $('legend').querySelector('.v').textContent);
 });
 
 /* --- иконки инструментов и подсказки --- */
@@ -405,7 +426,7 @@ steps.push(() => {
   const fld = [...hl.querySelectorAll('span')].filter(s => s.style.color);
   ck('поле раскрашено цветом своей кривой',
      fld.length > 0 && fld[0].textContent === 'u' &&
-     fld[0].style.color === getComputedStyle($('chips').firstChild).color,
+     fld[0].style.color === getComputedStyle($('legend').firstChild).color,
      fld.length + ' кусков, первый «' + (fld[0]||{}).textContent + '»');
   ck('хвост производной бледнее', [...hl.querySelectorAll('.dv')].some(s => s.textContent === 'xx'),
      hl.innerHTML.slice(0, 80));

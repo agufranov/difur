@@ -439,15 +439,24 @@ function frame() {
   requestAnimationFrame(frame);
 }
 
+/** одна форма записи числа на весь интерфейс: экспонента только там, где иначе
+ *  получится «0.0000» или частокол цифр */
+function fmt(v, dg) {
+  return isFinite(v) ? (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-3)
+         ? v.toExponential(2) : v.toFixed(dg === undefined ? 4 : dg)) : '∞';
+}
+
 function updateDiag() {
   if (!sim.model) return;
   const d = sim.diagnostics();
-  const f = v => isFinite(v) ? (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-3)
-              ? v.toExponential(2) : v.toFixed(4)) : '∞';
+  const f = fmt;
+  // показания поля — в его строке легенды, а не в общей таблице: они относятся
+  // к конкретной кривой, и читать их удобнее рядом с ней
+  for (const comp of sim.model.comps) {
+    const el = legendVals[comp.ci]; if (!el) continue;
+    el.textContent = 'max ' + f(d.per[comp.ci].max, 3) + ' · ∫ ' + f(d.per[comp.ci].mass, 3);
+  }
   let h = '<table><tr><td class="n">время t</td><td><span>' + d.t.toFixed(3) + '</span></td></tr>';
-  for (const comp of sim.model.comps)
-    h += '<tr><td class="n" style="color:' + compColor(comp) + '">' + comp.name + '</td>' +
-         '<td>max ' + f(d.per[comp.ci].max) + ' · ∫ ' + f(d.per[comp.ci].mass) + '</td></tr>';
   h += '<tr><td class="n">Δ за шаг</td><td>' + f(d.perStep) + '</td></tr>';
   // видно, упёрлись мы в железо или просто мало просим: серым — когда кадр обрывается по бюджету
   if (S.running && stepsPerSec > 0)
@@ -523,7 +532,7 @@ function applySystem(text, params) {
     }
     S.ic = ic; S.vis = vis;
     if (S.sel >= m.comps.length) S.sel = 0;
-    buildChips(m); buildParamUI(m); clearXT();
+    buildLegend(m); buildParamUI(m); clearXT();
     S.dead = false; refreshDt(true);
     syncEqUI();
     $('eq').blur();          // применилось — отпускаем поле, чтобы работал пробел
@@ -535,24 +544,33 @@ function applySystem(text, params) {
   }
 }
 
-function buildChips(m) {
-  const box = $('chips');
+/** Легенда поверх графика: она же список полей, она же их показания.
+ *  Строится только при пересборке модели или смене выбора/видимости; числа
+ *  каждый кадр переписывает `updateDiag` в готовые `.v` (`legendVals`) —
+ *  перестраивать разметку 60 раз в секунду было бы и дороже, и опаснее:
+ *  под курсором исчезал бы тот самый узел, по которому кликают. */
+let legendVals = [];
+function buildLegend(m) {
+  const box = $('legend');
   box.innerHTML = '';
+  legendVals = [];
   for (const comp of m.comps) {
     const b = document.createElement('div');
-    b.className = 'chip' + (comp.ci === S.sel ? ' sel' : '');
+    b.className = 'lgd' + (comp.ci === S.sel ? ' sel' : '') + (S.vis[comp.ci] ? '' : ' off');
     b.style.color = compColor(comp);
     b.innerHTML = '<span class="dot' + (S.vis[comp.ci] ? '' : ' off') + '"></span>' +
-                  '<span style="color:var(--txt)">' + comp.name + '</span>';
+                  '<span class="nm">' + comp.name + '</span><span class="v"></span>';
     b.querySelector('.dot').onclick = ev => {
       ev.stopPropagation();
       S.vis[comp.ci] = !S.vis[comp.ci];
-      buildChips(m); draw();
+      buildLegend(m); draw();
     };
-    b.onclick = () => { S.sel = comp.ci; S.vis[comp.ci] = true; buildChips(m); showXT(); draw(); };
+    b.onclick = () => { S.sel = comp.ci; S.vis[comp.ci] = true; buildLegend(m); showXT(); draw(); };
     box.appendChild(b);
+    legendVals[comp.ci] = b.querySelector('.v');
   }
   $('selname').textContent = '→ ' + m.comps[S.sel].name;
+  updateDiag();
 }
 
 /* ---- параметры: логарифмический ползунок ---- */
@@ -1402,7 +1420,7 @@ function loadPreset(p) {
   // темп пресета — это и есть «×1»: скорость всегда сбрасывается вместе с задачей
   S.baseSpf = p.spf || 6; S.spf = S.baseSpf; $('spf').value = S.spf; syncSpeed();
   setSmooth(!!p.smooth);
-  buildChips(sim.model);
+  buildLegend(sim.model);
   sim.t = 0; clearXT();
   // у некоторых задач автоподбор dt (он рассчитан на адвекцию u·ux) слишком осторожен
   S.autodt = !p.fixdt; $('autodt').checked = S.autodt;

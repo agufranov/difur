@@ -160,6 +160,25 @@
        pointer-events:none;letter-spacing:.4px}
   #hint{position:absolute;top:6px;left:9px;font-size:11px;color:var(--dim);pointer-events:none}
 
+  /* легенда — поверх графика, а не отдельным островом панели: показания поля
+     стоят у той кривой, к которой относятся. Полупрозрачная, чтобы не вырезать
+     кусок поля зрения; на графике справа сверху, где раньше висел тег «u(x, t)» */
+  #legend{position:absolute;top:6px;right:8px;z-index:2;
+          display:flex;flex-direction:column;gap:2px;padding:4px 5px;
+          background:rgba(10,14,21,.6);border:1px solid var(--line);border-radius:8px;
+          backdrop-filter:blur(3px)}
+  .lgd{display:flex;align-items:center;gap:8px;padding:2px 6px;border-radius:5px;
+       cursor:pointer;user-select:none;
+       font:12px/1.35 "Cascadia Mono",Consolas,monospace}
+  .lgd:hover{background:rgba(90,209,255,.08)}
+  /* выбранное поле — то, по которому рисует мышь; полоска слева его же цветом */
+  .lgd.sel{background:rgba(90,209,255,.12);box-shadow:inset 2px 0 0 currentColor}
+  .lgd .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  .lgd .dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.5}
+  .lgd .nm{color:var(--txt);min-width:2.1em}
+  .lgd.off .nm{opacity:.45}
+  .lgd .v{margin-left:auto;color:var(--dim);white-space:nowrap}
+
   aside{width:288px;flex:none;background:var(--panel);border-left:1px solid var(--line);
         overflow-y:auto;padding:10px 12px 40px}
   aside::-webkit-scrollbar{width:8px}
@@ -186,13 +205,6 @@
   .par .top label{color:var(--accent2);font-family:"Cascadia Mono",Consolas,monospace;flex:1}
   .par .top button{padding:2px 7px;font-size:12px}
   .par .sc{color:var(--dim);font-size:10px;display:flex;justify-content:space-between}
-  #chips{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
-  .chip{display:flex;align-items:center;gap:5px;padding:4px 9px;border-radius:14px;
-        border:1px solid var(--line);background:var(--panel2);cursor:pointer;font-size:12px;
-        font-family:"Cascadia Mono",Consolas,monospace}
-  .chip.sel{border-color:currentColor;background:#12384a}
-  .chip .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
-  .chip .dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.5}
   #diag table{border-collapse:collapse;width:100%}
   #diag td{padding:1px 0}
   #diag td.n{color:var(--dim);width:34%}
@@ -395,7 +407,8 @@
     <div id="plots">
       <div class="cwrap" id="pw">
         <canvas id="plot"></canvas>
-        <div class="tag">u(x, t)</div>
+        <!-- легенда заменила тег «u(x, t)»: она и называет кривые, и показывает их числа -->
+        <div id="legend" data-tip="Поля|Клик — выбрать поле, по которому рисует мышь. Кружок — показать или скрыть кривую"></div>
         <div id="hint">тяни мышью: ↕ амплитуда, ↔ ширина · колесо — ширина · Alt — добавить</div>
       </div>
       <div class="cwrap" id="xw">
@@ -426,12 +439,6 @@
       <h3>Диагностика</h3>
       <div id="diag"></div>
       <div id="status"></div>
-      </section>
-
-      <section class="isl">
-      <h3>Поля</h3>
-      <div id="chips"></div>
-      <div class="note">клик — выбрать поле для рисования, кружок — показать/скрыть</div>
       </section>
 
       <section class="isl">
