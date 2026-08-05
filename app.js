@@ -456,36 +456,42 @@ function updateDiag() {
     const el = legendVals[comp.ci]; if (!el) continue;
     el.textContent = 'max ' + f(d.per[comp.ci].max, 3) + ' · ∫ ' + f(d.per[comp.ci].mass, 3);
   }
-  let h = '<table><tr><td class="n">время t</td><td><span>' + d.t.toFixed(3) + '</span></td></tr>';
-  h += '<tr><td class="n">Δ за шаг</td><td>' + f(d.perStep) + '</td></tr>';
-  // видно, упёрлись мы в железо или просто мало просим: серым — когда кадр обрывается по бюджету
+  // общие показания — в нижней строке: это не настройка, а то, как идёт счёт,
+  // и смотрят на них не открывая никаких панелей
+  const q = v => '<span class="q">' + v + '</span>';
+  let h = 't ' + q(d.t.toFixed(3)) + ' · Δ/шаг ' + q(f(d.perStep));
+  // видно, упёрлись мы в железо или просто мало просим: приписка — когда кадр
+  // обрывается по бюджету, а не по числу шагов
   if (S.running && stepsPerSec > 0)
-    h += '<tr><td class="n">скорость</td><td>' + Math.round(stepsPerSec) + ' шаг/с' +
-         (stepsDone < S.spf ? ' <span style="color:var(--dim)">(упёрлось в кадр)</span>' : '') +
-         '</td></tr>';
+    h += ' · ' + q(Math.round(stepsPerSec)) + ' шаг/с' +
+         (stepsDone < S.spf ? ' (упёрлось в кадр)' : '');
   // на ударной волне потеря энергии физична (её теряет и точное решение),
   // поэтому ругаемся только когда гашение становится главным процессом
   if (S.smooth)
-    h += '<tr><td class="n">гашение</td><td><span style="color:' +
+    h += ' · гашение <span class="q" style="color:' +
          (d.loss > 0.1 ? 'var(--accent2)' : 'var(--ok)') + '">' +
-         (100*d.loss).toFixed(d.loss < 0.01 ? 2 : 1) + ' %/ед.вр.</span></td></tr>';
-  h += '</table>';
-  $('diag').innerHTML = h;
-  let st = '';
-  if (S.dead) st = '<span style="color:var(--bad)">решение разошлось — уменьши dt, сгладь данные или поменяй знак</span>';
-  else if (d.perStep > 0.1) st = '<span style="color:var(--accent2)">за шаг решение меняется на ' +
-    (100*d.perStep).toFixed(0) + '% — уменьши dt</span>';
-  else if (S.smooth && d.loss > 0.25) st = '<span style="color:var(--accent2)">гашение снимает ' +
-    (100*d.loss).toFixed(0) + '% энергии за единицу времени — считается уже не исходная задача, ' +
-    'а её вязкая версия: возьми сетку помельче</span>';
-  $('status').innerHTML = st;
-  // на телефоне вся диагностика спрятана в шторке, поэтому самое нужное — время и
-  // амплитуда выбранного поля — дублируется в нижнюю строку. Разнос важнее всего:
-  // без этого счёт молча стоял бы, а почему — видно только открыв шторку.
-  const bt = $('bart'), p = d.per[S.sel];
-  bt.textContent = S.dead ? 'решение разошлось'
-                   : 't ' + d.t.toFixed(2) + (p ? ' · max ' + f(p.max) : '');
-  bt.style.color = S.dead ? 'var(--bad)' : '';
+         (100*d.loss).toFixed(d.loss < 0.01 ? 2 : 1) + ' %/ед.вр.</span>';
+
+  let st = '', col = '';
+  if (S.dead) { col = 'var(--bad)';
+    st = 'решение разошлось — уменьши dt, сгладь данные или поменяй знак'; }
+  else if (d.perStep > 0.1) { col = 'var(--accent2)';
+    st = 'за шаг решение меняется на ' + (100*d.perStep).toFixed(0) + '% — уменьши dt'; }
+  else if (S.smooth && d.loss > 0.25) { col = 'var(--accent2)';
+    st = 'гашение снимает ' + (100*d.loss).toFixed(0) + '% энергии за единицу времени — ' +
+         'считается уже не исходная задача, а её вязкая версия: возьми сетку помельче'; }
+
+  // На телефоне строка одна и узкая: числа и тревога делить её не могут, поэтому
+  // тревога вытесняет числа. Счёт, вставший молча и без объяснения, — худшее,
+  // что может случиться, поэтому важнее всего именно она.
+  const bt = $('bart'), bm = $('barmsg'), phone = mob.matches;
+  if (phone && st) { bt.textContent = S.dead ? 'решение разошлось' : st; bt.style.color = col; }
+  else { bt.innerHTML = h; bt.style.color = ''; }
+  bm.textContent = phone ? '' : st;
+  bm.style.color = col;
+  // строка узкая, длинная тревога обрезается — полный текст остаётся в подсказке
+  if (st && !phone) bm.setAttribute('data-tip', 'Что случилось|' + st);
+  else bm.removeAttribute('data-tip');
 }
 
 /* ================= система уравнений ================= */

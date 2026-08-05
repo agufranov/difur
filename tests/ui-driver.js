@@ -160,7 +160,8 @@ steps.push(() => {
   let dead = false;
   for (let b=0;b<400 && !dead;b++){ $('stepb').click(); dead = D.S.dead; }
   ck('разнос детектируется и счёт останавливается', dead, 't='+D.sim.t.toFixed(2));
-  ck('в статусе есть сообщение', /разош/.test($('status').textContent), $('status').textContent.slice(0,60));
+  ck('в статусной строке есть сообщение', /разош/.test($('barmsg').textContent),
+     $('barmsg').textContent.slice(0,60));
 });
 
 /* --- ошибки и предупреждения --- */
@@ -352,8 +353,8 @@ steps.push(() => {
 steps.push(() => {
   const isl = document.querySelectorAll('aside .isl');
   const heads = [...document.querySelectorAll('aside h3')];
-  ck('разделы панели — острова', isl.length === 7, 'островов=' + isl.length);
-  ck('каждый заголовок внутри острова', heads.length === 7 && heads.every(h => h.closest('.isl')),
+  ck('разделы панели — острова', isl.length === 6, 'островов=' + isl.length);
+  ck('каждый заголовок внутри острова', heads.length === 6 && heads.every(h => h.closest('.isl')),
      'заголовков=' + heads.length);
   const bg = getComputedStyle(isl[0]).backgroundColor, asideBg = getComputedStyle($('app').querySelector('aside')).backgroundColor;
   ck('фон острова отличается от фона панели', bg !== asideBg, bg + ' vs ' + asideBg);
@@ -486,8 +487,8 @@ steps.push(() => {
   ck('горб опрокинулся, но решение не развалилось',
      D.sim.diagnostics().finite && tv<3, 'TV='+tv.toFixed(3)+' t='+D.sim.t.toFixed(1));
   $('stepb').click();
-  ck('цена гашения видна в диагностике', /гашение/.test($('diag').textContent),
-     $('diag').textContent.replace(/\s+/g,' ').slice(-46));
+  ck('цена гашения видна в статусной строке', /гашение/.test($('bart').textContent),
+     $('bart').textContent.replace(/\s+/g,' ').slice(-46));
 });
 
 /* --- все пресеты --- */
@@ -655,7 +656,12 @@ steps.push(() => {
      getComputedStyle(document.querySelector('aside')).position === 'static',
      getComputedStyle(document.querySelector('aside')).position);
   $('stepb').click();
-  ck('в нижнюю строку дублируется время', /^t \d/.test($('bart').textContent), $('bart').textContent);
+  // показания счёта живут только здесь: острова «Диагностика» в панели больше нет
+  ck('в нижней строке время и Δ за шаг',
+     /^t \d/.test($('bart').textContent) && /Δ\/шаг/.test($('bart').textContent),
+     $('bart').textContent);
+  ck('отдельного острова диагностики нет', !$('diag') && !$('status'),
+     String(!!$('diag')) + '/' + String(!!$('status')));
 });
 
 /* долгое нажатие вместо наведения: на тачскрине это единственный способ прочитать

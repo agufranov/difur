@@ -196,18 +196,11 @@
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
   .chk{display:flex;align-items:center;gap:7px;margin:5px 0;cursor:pointer;user-select:none}
   .chk input{accent-color:var(--accent);width:15px;height:15px}
-  #diag{font:12px/1.7 "Cascadia Mono",Consolas,monospace}
-  #diag b{color:var(--dim);font-weight:400;display:inline-block;width:82px}
-  #diag span{color:var(--accent)}
-  #status{margin-top:6px;font-size:12px}
   .par{margin:8px 0}
   .par .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:5px}
   .par .top label{color:var(--accent2);font-family:"Cascadia Mono",Consolas,monospace;flex:1}
   .par .top button{padding:2px 7px;font-size:12px}
   .par .sc{color:var(--dim);font-size:10px;display:flex;justify-content:space-between}
-  #diag table{border-collapse:collapse;width:100%}
-  #diag td{padding:1px 0}
-  #diag td.n{color:var(--dim);width:34%}
   /* пульт: размер иконки задаём мы, а не шрифт (см. ICON в app.js) */
   #padbtns svg{display:block;width:18px;height:18px;margin:0 auto}
   .note{color:var(--dim);font-size:11px;line-height:1.5;margin-top:6px}
@@ -273,9 +266,14 @@
   #barspd .row>label{min-width:0}
   #barspd .seg{flex:none}
   #barspd .seg button{padding:0 9px}
-  #bart{flex:1;min-width:0;color:var(--dim);
+  /* показания счёта: подписи приглушены, числа обычным цветом — строку читают
+     по числам, а подписи нужны только чтобы понять, какое из них какое */
+  #bart{flex:none;min-width:0;color:var(--dim);
         font:12px/1.25 "Cascadia Mono",Consolas,monospace;
         white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bart .q{color:var(--txt)}
+  #barmsg{flex:1;min-width:0;font-size:12px;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #gear{display:none}
 
   /* Порог телефона повторён в app.js (`MOB`) — стили и переезд пульта обязаны
@@ -335,7 +333,10 @@
     #padbtns button{width:50px}
     #padbtns svg{width:24px;height:24px}
     #barspd{display:none}
-    #bart{text-align:center}
+    /* строка одна и узкая: показания и тревога делить её не могут, поэтому
+       тревога вытесняет числа прямо в #bart (см. updateDiag) */
+    #bart{flex:1;text-align:center}
+    #barmsg{display:none}
     #gear{display:block;flex:none;padding:0 14px;font-size:16px}
 
     /* пальцем целятся хуже, чем мышью: всё, во что надо попасть, крупнее */
@@ -436,12 +437,6 @@
       </section>
 
       <section class="isl">
-      <h3>Диагностика</h3>
-      <div id="diag"></div>
-      <div id="status"></div>
-      </section>
-
-      <section class="isl">
       <h3>Начальные данные <span id="selname" style="color:var(--accent);float:right"></span></h3>
       <div id="tools"><!-- кнопки-миниатюры строит app.js --></div>
       <div class="row"><label>ширина</label><input type="number" id="wid" value="2" step="0.1" min="0.01"></div>
@@ -505,7 +500,9 @@
     <div id="barspd"><div id="speedbox" class="row"><label>скорость</label><div id="speed" class="seg"
       data-tip="Скорость счёта|Во сколько раз быстрее идёт модельное время. Это шаги на кадр, точность от них не зависит. Кадр всё равно обрывается по времени, так что «×50» на тяжёлой сетке — это не зависание, а просто меньше кадров в секунду."></div></div></div>
     <div id="bart"></div>
-    <button id="gear" data-tip="Настройки|Сетка, поля, начальные данные, параметры, диагностика — всё здесь">⚙</button>
+    <!-- тревоги: разнос, слишком крупный шаг, задача, съеденная гашением -->
+    <div id="barmsg"></div>
+    <button id="gear" data-tip="Настройки|Сетка, начальные данные, параметры, вид — всё здесь">⚙</button>
   </div>
 </div>
 
