@@ -131,7 +131,7 @@ const TOOLS = [
 /* ================= состояние ================= */
 const S = {
   tool:'sech', width:2, edge:0.4, add:false, live:false,
-  running:false, spf:6, autodt:true,
+  running:false, spf:6, baseSpf:6, autodt:true, coarse:false,
   autoY:true, yMin:-1, yMax:4, showIC:true,
   sel:0, vis:[], ic:[], base:null, drag:null, dead:false,
   wasRunning:false,                    // счёт до нажатия мыши — вернуть после отпускания
@@ -325,6 +325,8 @@ function draw() {
 }
 
 /* ================= автомасштаб ================= */
+const Y_LIMIT = 1000;     // дальше автомасштаб не уезжает: при разносе видно, что разнесло, и хватит
+
 function autoscale() {
   if (!S.autoY || S.drag || !sim.model) return;
   let lo = Infinity, hi = -Infinity;
@@ -338,34 +340,72 @@ function autoscale() {
   }
   if (!isFinite(lo) || !isFinite(hi)) return;
   const pad = Math.max(0.2, (hi-lo)*0.18);
-  S.yMin += (lo-pad - S.yMin)*0.12;
-  S.yMax += (hi+pad - S.yMax)*0.12;
+  const tMin = clamp(lo-pad, -Y_LIMIT, Y_LIMIT);
+  const tMax = clamp(hi+pad, -Y_LIMIT, Y_LIMIT);
+  // после разноса возвращаемся сразу: плавность нужна для дыхания решения,
+  // а не для проезда трёх порядков подряд
+  const snap = (S.yMax - S.yMin) > 8*(tMax - tMin);
+  const w = snap ? 1 : 0.12;
+  S.yMin += (tMin - S.yMin)*w;
+  S.yMax += (tMax - S.yMax)*w;
   $('ymin').value = S.yMin.toFixed(2); $('ymax').value = S.yMax.toFixed(2);
 }
 
 /* ================= шаг по времени ================= */
+/** «крупный шаг»: множитель на эвристические пределы автоподбора.
+ *  2 — потому что замерено: солитон КдФ 1.8e-5 -> 3.9e-4 (глазом не видно),
+ *  все пресеты живы, «Δ за шаг» не перескакивает порог тревоги. 3 уже перескакивает. */
+const COARSE_K = 2;
+
 function refreshDt(force) {
   if (!S.autodt || !sim.model) return;
-  const d = sim.diagnostics(), dx = sim.L/sim.N;
-  let dt = Math.min(0.02, sim.dtLimit());          // явные линейные связи (RK4-подобно)
+  const d = sim.diagnostics(), dx = sim.L/sim.N, K = S.coarse ? COARSE_K : 1;
+  // предел линейной части — настоящая устойчивость, его K не трогает
+  let dt = Math.min(0.02*K, sim.dtLimit());
   if (sim.model.nonlin) {
     const amp = Math.max(0.3, Math.min(1e3, isFinite(d.max) ? d.max : 1));
-    dt = Math.min(dt, 0.15*dx/amp);
-    if (sim.model.maxOrder >= 3) dt = Math.min(dt, 3*Math.pow(dx, 1.5));
+    dt = Math.min(dt, K*0.15*dx/amp);
+    if (sim.model.maxOrder >= 3) dt = Math.min(dt, K*3*Math.pow(dx, 1.5));
   }
   dt = clamp(dt, 1e-7, 0.05);
   if (force || Math.abs(dt - sim.dt) > 0.05*sim.dt) { sim.setDt(dt); $('dt').value = dt.toPrecision(3); }
+}
+
+/* ================= кадр ================= */
+/** Сколько миллисекунд кадра отдаём счёту. Остальное — отрисовка и браузер.
+ *  Из-за этого потолка «шагов/кадр» можно ставить любым: тяжёлая сетка
+ *  просто уронит fps, а не подвесит вкладку на секунды.
+ *  Меняется только из тестов (`setBudget`): под virtual-time в headless
+ *  `performance.now()` стоит, и обрыв иначе не воспроизвести. */
+let stepBudgetMs = 12;
+
+let stepsDone = 0, stepsPerSec = 0, spsT0 = 0, spsN = 0;
+
+/** шаги одного кадра: не больше S.spf и не дольше бюджета. Возвращает сделанное */
+function frameSteps() {
+  const w0 = performance.now();
+  let i = 0;
+  for (; i < S.spf; i++) {
+    sim.step();
+    // время смотрим не каждый шаг: на мелкой сетке сам замер сопоставим с шагом
+    if ((i & 7) === 7 && performance.now() - w0 > stepBudgetMs) { i++; break; }
+  }
+  return i;
 }
 
 function frame() {
   if (S.running && !S.dead) {
     const t0 = sim.t;
     refreshDt(false);
-    for (let i = 0; i < S.spf; i++) sim.step();
+    stepsDone = frameSteps(); spsN += stepsDone;
     lastFrameDt = sim.t - t0;
     if (!sim.diagnostics().finite) { S.dead = true; S.running = false; syncPlay(); }
     pushRow();
-  }
+  } else stepsDone = 0;
+
+  const now = performance.now();
+  if (now - spsT0 > 500) { stepsPerSec = spsN*1000/(now - spsT0); spsT0 = now; spsN = 0; }
+
   autoscale();
   draw();
   updateDiag();
@@ -382,6 +422,11 @@ function updateDiag() {
     h += '<tr><td class="n" style="color:' + compColor(comp) + '">' + comp.name + '</td>' +
          '<td>max ' + f(d.per[comp.ci].max) + ' · ∫ ' + f(d.per[comp.ci].mass) + '</td></tr>';
   h += '<tr><td class="n">Δ за шаг</td><td>' + f(d.perStep) + '</td></tr>';
+  // видно, упёрлись мы в железо или просто мало просим: серым — когда кадр обрывается по бюджету
+  if (S.running && stepsPerSec > 0)
+    h += '<tr><td class="n">скорость</td><td>' + Math.round(stepsPerSec) + ' шаг/с' +
+         (stepsDone < S.spf ? ' <span style="color:var(--dim)">(упёрлось в кадр)</span>' : '') +
+         '</td></tr>';
   // на ударной волне потеря энергии физична (её теряет и точное решение),
   // поэтому ругаемся только когда гашение становится главным процессом
   if (S.smooth)
@@ -1061,9 +1106,34 @@ $('tools').addEventListener('click', e => {
   [...$('tools').children].forEach(x => x.classList.toggle('on', x === b));
 });
 
-$('spf').oninput = () => S.spf = clamp(+$('spf').value|0, 1, 200);
+$('spf').oninput = () => { S.spf = clamp(+$('spf').value|0, 1, 2000); syncSpeed(); };
 $('dt').oninput = () => { const v = +$('dt').value; if (v > 0) { S.autodt = false; $('autodt').checked = false; sim.setDt(v); } };
 $('autodt').onchange = () => { S.autodt = $('autodt').checked; refreshDt(true); };
+$('coarsedt').onchange = () => { S.coarse = $('coarsedt').checked; refreshDt(true); };
+
+/* ================= скорость ================= */
+/** «×1» — не 6 шагов, а темп, который задал пресет (`S.baseSpf`): у КдФ это 10,
+ *  у волнового 10, по умолчанию 6. Иначе после загрузки пресета ни одна кнопка
+ *  не была бы подсвечена. Точность от множителя не зависит вовсе — это только
+ *  число шагов на кадр, а кадр всё равно обрывается по бюджету. */
+const SPEEDS = [1, 2, 5, 10, 25, 50];
+
+function buildSpeed() {
+  $('speed').innerHTML = SPEEDS.map(k =>
+    '<button data-k="' + k + '">×' + k + '</button>').join('');
+  syncSpeed();
+}
+function syncSpeed() {
+  for (const b of $('speed').children)
+    b.classList.toggle('on', S.spf === Math.round(S.baseSpf * +b.dataset.k));
+}
+$('speed').addEventListener('click', e => {
+  const b = e.target.closest('button[data-k]'); if (!b) return;
+  S.spf = clamp(Math.round(S.baseSpf * +b.dataset.k), 1, 2000);
+  $('spf').value = S.spf;
+  syncSpeed();
+});
+buildSpeed();
 $('wid').oninput = () => S.width = Math.max(1e-3, +$('wid').value);
 $('edge').oninput = () => S.edge = Math.max(1e-3, +$('edge').value);
 $('addm').onchange = () => S.add = $('addm').checked;
@@ -1222,7 +1292,8 @@ function loadPreset(p) {
   }
   if (p.vis) for (const c of sim.model.comps) if (c.name in p.vis) S.vis[c.ci] = p.vis[c.name];
   if (p.sel) { const c = sim.model.comps.find(q => q.name === p.sel); if (c) S.sel = c.ci; }
-  if (p.spf) { S.spf = p.spf; $('spf').value = p.spf; }
+  // темп пресета — это и есть «×1»: скорость всегда сбрасывается вместе с задачей
+  S.baseSpf = p.spf || 6; S.spf = S.baseSpf; $('spf').value = S.spf; syncSpeed();
   setSmooth(!!p.smooth);
   buildChips(sim.model);
   sim.t = 0; clearXT();
@@ -1240,6 +1311,8 @@ syncPlay();
 requestAnimationFrame(frame);
 
 window.__difur = { S, sim, PRESETS, loadPreset, px2x, py2u, x2px, u2py, applySystem,
-                   prettyEq, fitMath, formatEq };
+                   prettyEq, fitMath, formatEq, refreshDt, frameSteps,
+                   setBudget: ms => stepBudgetMs = ms,
+                   stepInfo: () => ({ done: stepsDone, sps: stepsPerSec }) };
 
 })();

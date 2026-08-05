@@ -480,6 +480,64 @@ steps.push(() => {
   ck('все пресеты грузятся и считаются', bad.length===0, bad.join(' | '));
 });
 
+/* --- скорость счёта --- */
+steps.push(() => {
+  D.loadPreset(D.PRESETS[0]);
+  const btns = [...$('speed').children];
+  ck('кнопки скорости построены', btns.length===6, btns.map(b=>b.textContent).join(' '));
+  ck('отмечена та, что стоит', btns.filter(b=>b.classList.contains('on')).length===1,
+     'spf='+D.S.spf);
+  const spf0 = D.S.spf;
+  ck('«×1» — это темп пресета', D.S.baseSpf===spf0 &&
+     btns.find(b=>b.dataset.k==='1').classList.contains('on'), 'baseSpf='+D.S.baseSpf);
+  btns.find(b=>b.dataset.k==='10').click();
+  ck('×10 — вдесятеро больше шагов на кадр', D.S.spf===spf0*10, spf0+' -> '+D.S.spf);
+  ck('поле «шагов/кадр» подхватило', +$('spf').value===D.S.spf, $('spf').value);
+  ck('подсветилась новая кнопка',
+     btns.find(b=>b.dataset.k==='10').classList.contains('on') &&
+     !btns.find(b=>b.dataset.k==='1').classList.contains('on'));
+  // ручной ввод снимает подсветку: 7 — не кратно ни одной кнопке
+  $('spf').value='7'; $('spf').dispatchEvent(new Event('input'));
+  ck('поле не даёт увести шаги в ноль', D.S.spf===7, 'spf='+D.S.spf);
+  ck('ручной ввод шагов не подсвечивает кнопку',
+     btns.every(b=>!b.classList.contains('on')), 'spf='+D.S.spf);
+  ck('потолок шагов поднят до 2000', +$('spf').max===2000, $('spf').max);
+});
+
+steps.push(() => {
+  // Настоящий обрыв по времени в headless не воспроизвести: под
+  // --virtual-time-budget performance.now() в синхронном цикле стоит.
+  // Поэтому проверяем сам механизм — отрицательным бюджетом.
+  D.S.spf = 2000; $('spf').value='2000';
+  ck('весь бюджет — считаются все запрошенные шаги', D.frameSteps()===2000);
+  D.setBudget(-1);
+  const done = D.frameSteps();
+  ck('кончился бюджет — кадр оборван', done < 2000, 'сделано '+done+' из 2000');
+  ck('обрыв на первой же проверке, шагов кратно 8', done===8, 'шагов='+done);
+  ck('решение не испорчено обрывом', D.sim.diagnostics().finite);
+  D.setBudget(12);
+  D.S.spf = 6; $('spf').value='6'; $('spf').dispatchEvent(new Event('input'));
+});
+
+/* --- крупный шаг --- */
+steps.push(() => {
+  D.loadPreset(D.PRESETS[0]);
+  $('autodt').checked = true; $('autodt').dispatchEvent(new Event('change'));
+  const dt1 = D.sim.dt;
+  $('coarsedt').checked = true; $('coarsedt').dispatchEvent(new Event('change'));
+  const dt2 = D.sim.dt;
+  ck('крупный шаг увеличивает dt вдвое', Math.abs(dt2/dt1 - 2) < 0.1,
+     dt1.toExponential(2)+' -> '+dt2.toExponential(2)+' (×'+(dt2/dt1).toFixed(2)+')');
+  for (let i=0;i<400;i++) D.sim.step();
+  const d = D.sim.diagnostics();
+  ck('на крупном шаге КдФ по-прежнему живой', d.finite && d.per[0].max<10,
+     'max='+d.per[0].max.toFixed(3)+' t='+d.t.toFixed(2));
+  ck('и «Δ за шаг» не в тревоге', d.perStep < 0.1, 'Δ='+d.perStep.toExponential(2));
+  $('coarsedt').checked = false; $('coarsedt').dispatchEvent(new Event('change'));
+  ck('выключение возвращает прежний dt', Math.abs(D.sim.dt - dt1) < 0.2*dt1,
+     D.sim.dt.toExponential(2)+' vs '+dt1.toExponential(2));
+});
+
 /* --- перо --- */
 steps.push(() => {
   D.loadPreset(D.PRESETS[0]);

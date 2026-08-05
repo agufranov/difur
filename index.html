@@ -151,6 +151,8 @@
   .row{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
   .row>label{color:var(--dim);min-width:78px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+  .seg{display:flex;gap:3px;flex:1}
+  .seg button{flex:1;padding:3px 0;font-size:12px;min-width:0}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
   .chk{display:flex;align-items:center;gap:7px;margin:5px 0;cursor:pointer;user-select:none}
   .chk input{accent-color:var(--accent);width:15px;height:15px}
@@ -251,9 +253,13 @@
         <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз — не дожидаясь анимации">⏭</button>
         <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
       </div>
-      <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="200" step="1"></div>
+      <div class="row"><label>скорость</label><div id="speed" class="seg"
+        data-tip="Скорость счёта|Во сколько раз быстрее идёт модельное время. Это шаги на кадр, точность от них не зависит. Кадр всё равно обрывается по времени, так что «×50» на тяжёлой сетке — это не зависание, а просто меньше кадров в секунду."></div></div>
+      <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="2000" step="1"></div>
       <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
       <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
+      <label class="chk"><input type="checkbox" id="coarsedt"
+        data-tip="Крупный шаг|Автоподбор берёт dt вдвое крупнее: ещё ×2 к скорости почти даром. Замерено на солитоне КдФ: отн. ошибка 1.8e-5 → 3.9e-4, глазом не видно. Если «Δ за шаг» покраснел — выключи.">крупный шаг (вдвое, чуть грубее)</label>
       <button id="smooth" style="width:100%;margin-top:4px"
         data-tip="Гасить осцилляции опрокидывания|Когда горб опрокидывается, решение становится разрывным, а ряд Фурье отвечает на разрыв пилой на всю сетку. Кнопка добавляет гипервязкость в верхушку спектра — пила гаснет, разрыв размазывается на пару ячеек. Это меняет задачу: смотри «гашение» в диагностике.">∿ гасить осцилляции</button>
       </section>
