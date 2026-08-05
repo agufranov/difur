@@ -641,6 +641,78 @@ steps.push(() => {
   ck('строка сообщений снова скрыта', getComputedStyle($('msg')).display === 'none');
 });
 
+/* --- комплексное поле: Шрёдингер --- */
+steps.push(() => {
+  const p = D.PRESETS.filter(q => /навстречу/.test(q.name))[0];
+  D.loadPreset(p);
+  ck('пресет Шрёдингера загрузился', /i\*uxx/.test($('eq').value) && $('err').textContent === '',
+     $('eq').value + ' | ' + $('err').textContent);
+  ck('поле стало комплексным', D.sim.isComplex(0) && D.sim.model.complex);
+  // список пресетов липкий: у трёх задач Шрёдингера один и тот же текст уравнения,
+  // и без этого заголовок перескакивал бы на первую из них
+  ck('в списке остался выбранный пресет', /навстречу/.test($('presetbtn').textContent),
+     $('presetbtn').textContent);
+  ck('«импульс k₀» появился', getComputedStyle($('k0row')).display !== 'none');
+  ck('в легенде колечко фазы', !!$('legend').querySelector('.dot.ph'));
+  ck('в легенде норма, а не ∫', /‖u‖²/.test($('legend').textContent), $('legend').textContent);
+  ck('подсказка объясняет, что нарисован модуль', /\|ψ\|/.test($('hint').textContent),
+     $('hint').textContent);
+});
+
+steps.push(() => {
+  const norm0 = D.sim.diagnostics().per[0].norm;
+  for (let i=0;i<40;i++) $('stepb').click();
+  const d = D.sim.diagnostics();
+  ck('пакеты считаются', d.finite && D.sim.t > 0, 't='+D.sim.t.toFixed(2));
+  // норма Шрёдингера сохраняется — это и есть признак, что комплексная часть
+  // интерфейса (setU с мнимой частью, легенда, диаграмма) не портит состояние
+  ck('норма ‖ψ‖² держится', Math.abs(d.per[0].norm/norm0 - 1) < 1e-10,
+     'откл='+Math.abs(d.per[0].norm/norm0-1).toExponential(2));
+  ck('мнимая часть поля не пустая', [...D.sim.getUi(0)].some(v => Math.abs(v) > 1e-6));
+
+  // кривая рисуется фазой: на графике обязаны быть разные тона, а не один цвет поля
+  const px = $('plot').getContext('2d').getImageData(0, 0, $('plot').width, $('plot').height).data;
+  const hues = new Set();
+  for (let i = 0; i < px.length; i += 4) {
+    const r=px[i], g=px[i+1], b=px[i+2], mx=Math.max(r,g,b), mn=Math.min(r,g,b);
+    if (mx > 90 && mx - mn > 60) hues.add(Math.round(Math.atan2(Math.sqrt(3)*(g-b), 2*r-g-b)*8));
+  }
+  ck('кривая раскрашена фазой, а не одним цветом', hues.size >= 6, 'тонов='+hues.size);
+});
+
+steps.push(() => {
+  // импульс: тот же нарисованный профиль с k₀ обязан поехать, а без него — стоять
+  D.loadPreset(D.PRESETS.filter(q => /расплывание/.test(q.name))[0]);
+  const centre = () => { const u=D.sim.getU(0), w=D.sim.getUi(0);
+    let n=0,m=0; for(let j=0;j<D.sim.N;j++){ const p=u[j]*u[j]+w[j]*w[j]; n+=p; m+=p*D.sim.x[j]; }
+    return m/n; };
+  for (let i=0;i<30;i++) D.sim.step();
+  ck('без импульса пакет стоит на месте', Math.abs(centre()) < 1e-6, centre().toExponential(2));
+
+  $('k0').value = '3'; $('k0').dispatchEvent(new Event('input'));
+  D.S.sel = 0;
+  $('tools').querySelector('[data-tool="gauss"]').click();
+  const r = $('plot').getBoundingClientRect();
+  plot.dispatchEvent(new PointerEvent('pointerdown', {clientX:r.left+r.width*0.5, clientY:r.top+D.u2py(1), bubbles:true, pointerId:1, buttons:1}));
+  plot.dispatchEvent(new PointerEvent('pointerup',   {clientX:r.left+r.width*0.5, clientY:r.top+D.u2py(1), bubbles:true, pointerId:1, buttons:1}));
+  const c0 = centre();
+  for (let i=0;i<200;i++) D.sim.step();
+  const v = (centre() - c0)/D.sim.t;
+  // групповая скорость свободного пакета ровно 2k₀ — заодно проверяет знак фазы
+  ck('нарисованный пакет едет со скоростью 2k₀', Math.abs(v - 6) < 0.05, 'v='+v.toFixed(4));
+});
+
+steps.push(() => {
+  // контракт ядра виден в интерфейсе: ошибка внятная и подсвечена на месте
+  $('eq').value = 'ut = i*uxx + i*abs(u)^2*u'; $('eq').dispatchEvent(new Event('input'));
+  ck('нелинейность с i отвергается внятно', /Мнимая единица/.test($('err').textContent),
+     $('err').textContent.slice(0,44));
+  ck('виноватый кусок подсвечен', !!$('eqhl').querySelector('.mk'));
+  setEq('ut + u*ux + uxxx = 0');
+  ck('после возврата к вещественной задаче k₀ скрыт',
+     getComputedStyle($('k0row')).display === 'none' && !D.sim.isComplex(0));
+});
+
 /* --- телефонная раскладка ---
    Прогон идёт в окне 1400x900, то есть в десктопном режиме: проверяем, что он
    остался нетронутым, и что порог переключения записан в CSS и в JS одинаково. */

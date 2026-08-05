@@ -69,6 +69,23 @@ const PRESETS = [
     p:{a:0.05,b:0.5,c:2,d:0.6}, L:60, N:512, dt:0.01, y:[-0.2,1.6],
     ic:{ u:{tool:'const',A:0.5}, v:{tool:'gauss',A:0.3,w:2} } },
 
+  /* Комплексные поля: `i` делает из теплопроводности Шрёдингера. Кривая на графике —
+     модуль, цвет вдоль неё — фаза, диаграмма x–t становится domain coloring.
+     У свободного пакета явной части нет вовсе, поэтому экспонента точна и dt
+     ограничивает только гладкость картинки — отсюда крупные dt и fixdt. */
+  { name:'ψ Шрёдингер: расплывание пакета', eq:'ut = i*uxx', L:60, N:512, dt:0.004,
+    fixdt:true, spf:10, y:[-0.1,1.1], ic:{ u:{tool:'gauss',A:1,w:2,k0:0} } },
+  { name:'ψ Шрёдингер: пакет с импульсом', eq:'ut = i*uxx', L:60, N:512, dt:0.004,
+    fixdt:true, spf:10, y:[-0.1,1.1], k0:3, ic:{ u:{tool:'gauss',A:1,w:2,k0:3} } },
+  { name:'ψ Шрёдингер: два пакета навстречу', eq:'ut = i*uxx', L:60, N:1024, dt:0.004,
+    fixdt:true, spf:10, y:[-0.1,1.6], k0:4,
+    // встречные импульсы ±k₀: в месте встречи получается интерференционная гребёнка,
+    // и на диаграмме x–t она видна как решётка, а не как «горбы прошли друг сквозь друга»
+    ic:{ u:{ fnRe:x => Math.exp(-Math.pow((x+15)/3,2))*Math.cos(4*x)
+                     + Math.exp(-Math.pow((x-15)/3,2))*Math.cos(-4*x),
+             fnIm:x => Math.exp(-Math.pow((x+15)/3,2))*Math.sin(4*x)
+                     + Math.exp(-Math.pow((x-15)/3,2))*Math.sin(-4*x) } } },
+
   { name:'★ Опрокидывание горба (Бюргерс без вязкости)', eq:'ut + u*ux = 0', L:20, N:512,
     dt:0.002, y:[-0.3,1.2], smooth:true,
     ic:{ u:{tool:'gauss',A:1,w:2} } },
@@ -160,7 +177,8 @@ const S = {
   tool:'sech', width:2, edge:0.4, add:false, live:false,
   running:false, spf:6, baseSpf:6, autodt:true, coarse:false,
   autoY:true, yMin:-1, yMax:4, showIC:true,
-  sel:0, vis:[], ic:[], base:null, drag:null, dead:false,
+  sel:0, vis:[], ic:[], icI:[], base:null, drag:null, dead:false,
+  k0:0,                                // импульс: фаза e^{ik₀x} у комплексного поля
   wasRunning:false,                    // счёт до нажатия мыши — вернуть после отпускания
   smooth:false,                        // гашение осцилляций опрокидывания
   appliedEq:null                       // текст, который сейчас стоит в модели
@@ -214,9 +232,42 @@ function makeProfile(desc) {
 }
 
 /* ================= начальные данные ================= */
+
+/** Начальные данные комплексного поля: нарисованный мышью профиль — это модуль,
+ *  а фазу задаёт «импульс» k₀ множителем e^{ik₀x}. Без него нарисовать можно было
+ *  бы только неподвижный пакет: у вещественного профиля групповая скорость нуль,
+ *  и вся картина сводилась бы к расплыванию на месте. */
+function withPhase(re, k0) {
+  if (!k0) return { re, im: null };
+  const N = sim.N, a = new Float64Array(N), b = new Float64Array(N);
+  for (let j = 0; j < N; j++) {
+    const p = k0*sim.x[j];
+    a[j] = re[j]*Math.cos(p); b[j] = re[j]*Math.sin(p);
+  }
+  return { re:a, im:b };
+}
+
+/** нарисованное/пресетное описание -> пара массивов (im = null у вещественного поля) */
+function makeIC(desc, complex) {
+  if (desc.fnRe) {                       // пресет задаёт обе части сам
+    const N = sim.N, a = new Float64Array(N), b = new Float64Array(N);
+    for (let j = 0; j < N; j++) { a[j] = desc.fnRe(sim.x[j], sim.L); b[j] = desc.fnIm(sim.x[j], sim.L); }
+    return { re:a, im:b };
+  }
+  const re = makeProfile(desc);
+  return complex ? withPhase(re, desc.k0 === undefined ? S.k0 : desc.k0) : { re, im:null };
+}
+
+/** state <- поле; мнимую часть храним рядом (у вещественных полей она null) */
+function setIC(c, re, im) {
+  sim.setU(c, re, im);
+  S.ic[c] = Float64Array.from(sim.getU(c));
+  S.icI[c] = sim.isComplex(c) ? Float64Array.from(sim.getUi(c)) : null;
+}
+
 function commit(u, keepTime) {
-  sim.setU(S.sel, u);
-  S.ic[S.sel] = Float64Array.from(sim.getU(S.sel));
+  const p = sim.isComplex(S.sel) ? withPhase(u, S.k0) : { re:u, im:null };
+  setIC(S.sel, p.re, p.im);
   if (!keepTime) { sim.t = 0; clearXT(); }
   S.dead = false;
   refreshDt(true);
@@ -248,10 +299,34 @@ function cmap(s) {
   return [r,g,b];
 }
 
+/** тон -> rgb (s=0.85, l задаётся); нужен для комплексной диаграммы, где цвет
+    приходится писать прямо в пиксели, а не строкой CSS */
+function hue2rgb(h, l) {
+  const s = 0.85, C = (1 - Math.abs(2*l - 1))*s, hp = h/60, X = C*(1 - Math.abs(hp % 2 - 1));
+  let r=0,g=0,b=0;
+  if (hp < 1) { r=C; g=X; } else if (hp < 2) { r=X; g=C; }
+  else if (hp < 3) { g=C; b=X; } else if (hp < 4) { g=X; b=C; }
+  else if (hp < 5) { r=X; b=C; } else { r=C; b=X; }
+  const m = l - C/2;
+  return [(r+m)*255, (g+m)*255, (b+m)*255];
+}
+
+/** Комплексная диаграмма x–t — domain coloring: тон = фаза, яркость = |ψ|.
+    Ради неё фича во многом и делается: дисперсия, интерференция и фазовые сдвиги
+    видны как узор, а не как «что-то шевелится». */
+function cmapCx(re, im, sc) {
+  const v = clamp(Math.hypot(re, im)/sc, 0, 1);
+  const bg = [10,14,21];
+  if (v < 1e-4) return bg;
+  const col = hue2rgb(phaseHue(re, im), 0.55);
+  const q = Math.pow(v, 0.7);                     // слабые места иначе не видно вовсе
+  return [bg[0]+(col[0]-bg[0])*q, bg[1]+(col[1]-bg[1])*q, bg[2]+(col[2]-bg[2])*q];
+}
+
 function pushRow() {
   const N = sim.N, dg = sim.diagnostics();
   for (let c = 0; c < xtBuf.length; c++) {
-    const u = sim.getU(c), d = xtBuf[c].data;
+    const u = sim.getU(c), d = xtBuf[c].data, cx = sim.isComplex(c), w = cx ? sim.getUi(c) : null;
     const mx = isFinite(dg.per[c].max) ? dg.per[c].max : 0;
     xtScale[c] = Math.max(mx, xtScale[c]*0.995, 1e-6);
     const sc = xtScale[c];
@@ -259,7 +334,7 @@ function pushRow() {
     const off = (XT_H-1)*XT_W*4;
     for (let px = 0; px < XT_W; px++) {
       const j = Math.min(N-1, Math.floor(px*N/XT_W));
-      const col = cmap(u[j]/sc);
+      const col = cx ? cmapCx(u[j], w[j], sc) : cmap(u[j]/sc);
       d[off+4*px] = col[0]; d[off+4*px+1] = col[1]; d[off+4*px+2] = col[2]; d[off+4*px+3] = 255;
     }
   }
@@ -283,6 +358,42 @@ function fitCanvas() {
 function niceStep(range) {
   const raw = range/6, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw/p;
   return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10)*p;
+}
+
+/* ---- комплексное поле: кривая — модуль, цвет вдоль неё — фаза ----
+   Фаза периодична, и тон периодичен — они подходят друг другу без всякой шкалы:
+   arg = 0 красный, π/2 зелёный, π голубой. Частота смены тона вдоль x — это
+   локальное k, то есть импульс виден прямо на картинке. */
+const phaseHue = (re, im) => (Math.atan2(im, re)*57.29577951308232 + 360) % 360;
+const phaseColor = (re, im, l, a) =>
+  'hsl(' + phaseHue(re, im).toFixed(0) + ' 85% ' + (l || 62) + '%' +
+  (a === undefined ? '' : ' / ' + a) + ')';
+
+/** |ψ| ломаной, каждый отрезок своим тоном; заливка под ней — тем же тоном */
+function curveCx(ci, width, fill) {
+  const ctx = pctx, N = sim.N, re = sim.getU(ci), im = sim.getUi(ci);
+  const mod = j => Math.hypot(re[j], im[j]);
+  if (fill) {
+    const y0 = u2py(0);
+    for (let j = 0; j < N - 1; j++) {
+      ctx.fillStyle = phaseColor(re[j], im[j], 55, 0.22);
+      const xa = x2px(sim.x[j]), xb = x2px(sim.x[j+1]);
+      ctx.beginPath();
+      ctx.moveTo(xa, y0); ctx.lineTo(xa, u2py(mod(j)));
+      ctx.lineTo(xb, u2py(mod(j+1))); ctx.lineTo(xb, y0);
+      ctx.closePath(); ctx.fill();
+    }
+  }
+  ctx.save();
+  ctx.lineWidth = width; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  for (let j = 0; j < N - 1; j++) {
+    ctx.strokeStyle = phaseColor(re[j], im[j]);
+    ctx.beginPath();
+    ctx.moveTo(x2px(sim.x[j]), u2py(mod(j)));
+    ctx.lineTo(x2px(sim.x[j+1]), u2py(mod(j+1)));
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 function curve(arr, color, dash, width, alpha) {
@@ -323,15 +434,22 @@ function draw() {
   }
   if (!sim.model) return;
 
-  // начальные условия — призраком
+  // начальные условия — призраком (у комплексного поля призрак тоже по модулю)
   if (S.showIC)
     for (const comp of sim.model.comps)
-      if (S.vis[comp.ci] && S.ic[comp.ci])
-        curve(S.ic[comp.ci], compColor(comp), [3,4], 1, 0.28);
+      if (S.vis[comp.ci] && S.ic[comp.ci]) {
+        let g = S.ic[comp.ci];
+        if (S.icI[comp.ci]) {
+          const w = S.icI[comp.ci], m = new Float64Array(g.length);
+          for (let j = 0; j < g.length; j++) m[j] = Math.hypot(g[j], w[j]);
+          g = m;
+        }
+        curve(g, compColor(comp), [3,4], 1, 0.28);
+      }
 
   // заливка под выбранным полем
   const sel = sim.model.comps[S.sel];
-  if (S.vis[S.sel]) {
+  if (S.vis[S.sel] && !sel.complex) {
     const col = compColor(sel), u = sim.getU(S.sel);
     const g = c.createLinearGradient(0, u2py(S.yMax), 0, u2py(S.yMin));
     g.addColorStop(0, col + '33'); g.addColorStop(1, col + '03');
@@ -344,6 +462,7 @@ function draw() {
   for (const comp of sim.model.comps) {
     if (!S.vis[comp.ci]) continue;
     const isSel = comp.ci === S.sel;
+    if (comp.complex) { curveCx(comp.ci, isSel ? 2.4 : 1.6, isSel); continue; }
     if (isSel) { c.shadowColor = compColor(comp) + '99'; c.shadowBlur = 8; }
     curve(sim.getU(comp.ci), compColor(comp),
           comp.d ? [7,4] : [], isSel ? 2.2 : 1.5, comp.d ? 0.85 : 1);
@@ -360,6 +479,13 @@ function autoscale() {
   for (const comp of sim.model.comps) {
     if (!S.vis[comp.ci]) continue;
     const u = sim.getU(comp.ci);
+    // у комплексного поля на графике модуль, он же и задаёт масштаб (снизу — ноль)
+    if (comp.complex) {
+      const w = sim.getUi(comp.ci);
+      if (0 < lo) lo = 0;
+      for (let j = 0; j < sim.N; j++) { const m = Math.hypot(u[j], w[j]); if (m > hi) hi = m; }
+      continue;
+    }
     for (let j = 0; j < sim.N; j++) {
       if (u[j] < lo) lo = u[j];
       if (u[j] > hi) hi = u[j];
@@ -453,8 +579,12 @@ function updateDiag() {
   // показания поля — в его строке легенды, а не в общей таблице: они относятся
   // к конкретной кривой, и читать их удобнее рядом с ней
   for (const comp of sim.model.comps) {
-    const el = legendVals[comp.ci]; if (!el) continue;
-    el.textContent = 'max ' + f(d.per[comp.ci].max, 3) + ' · ∫ ' + f(d.per[comp.ci].mass, 3);
+    const el = legendVals[comp.ci], p = d.per[comp.ci]; if (!el) continue;
+    // у комплексного поля вместо ∫u — сохраняющаяся норма: именно по ней видно,
+    // что счёт идёт правильно (у Шрёдингера она обязана стоять на месте)
+    el.textContent = comp.complex
+      ? 'max ' + f(p.max, 3) + ' · ‖u‖² ' + f(p.norm, 3)
+      : 'max ' + f(p.max, 3) + ' · ∫ ' + f(p.mass, 3);
   }
   // общие показания — в нижней строке: это не настройка, а то, как идёт счёт,
   // и смотрят на них не открывая никаких панелей
@@ -521,23 +651,27 @@ function applySystem(text, params) {
   text = formatEq(text);
   if ($('eq').value !== text) { $('eq').value = text; autosizeEq(); }
   const prev = sim.model ? sim.model.comps.map(c => c.name) : null;
-  const prevIC = S.ic, prevVis = S.vis;
+  const prevIC = S.ic, prevICI = S.icI, prevVis = S.vis;
   try {
     const m = sim.setSystem(text, params || (sim.model ? sim.model.params : {}));
     showError(null);
     showWarnings(m);
     S.appliedEq = text;
 
-    // начальные данные и видимость: переносим по именам компонент, новые — нули
-    const ic = [], vis = [];
+    // начальные данные и видимость: переносим по именам компонент, новые — нули.
+    // Мнимая часть едет вместе с вещественной: иначе правка константы в
+    // «ut = a*i*uxx» стирала бы фазу нарисованного пакета
+    const ic = [], icI = [], vis = [];
     for (const c of m.comps) {
       const j = prev ? prev.indexOf(c.name) : -1;
       const keep = j >= 0 && prevIC[j] && prevIC[j].length === sim.N;
       ic[c.ci] = keep ? prevIC[j] : new Float64Array(sim.N);
+      icI[c.ci] = keep && prevICI[j] && c.complex ? prevICI[j] : null;
       vis[c.ci] = j >= 0 ? prevVis[j] !== false : c.d === 0;
       if (!keep) sim.setU(c.ci, ic[c.ci]);
+      else if (icI[c.ci]) sim.setU(c.ci, ic[c.ci], icI[c.ci]);
     }
-    S.ic = ic; S.vis = vis;
+    S.ic = ic; S.icI = icI; S.vis = vis;
     if (S.sel >= m.comps.length) S.sel = 0;
     buildLegend(m); buildParamUI(m); clearXT();
     S.dead = false; refreshDt(true);
@@ -565,7 +699,9 @@ function buildLegend(m) {
     const b = document.createElement('div');
     b.className = 'lgd' + (comp.ci === S.sel ? ' sel' : '') + (S.vis[comp.ci] ? '' : ' off');
     b.style.color = compColor(comp);
-    b.innerHTML = '<span class="dot' + (S.vis[comp.ci] ? '' : ' off') + '"></span>' +
+    // у комплексного поля вместо точки — колечко фазы: это и легенда цвета кривой
+    b.innerHTML = '<span class="dot' + (comp.complex ? ' ph' : '') +
+                  (S.vis[comp.ci] ? '' : ' off') + '"></span>' +
                   '<span class="nm">' + comp.name + '</span><span class="v"></span>';
     b.querySelector('.dot').onclick = ev => {
       ev.stopPropagation();
@@ -577,7 +713,20 @@ function buildLegend(m) {
     legendVals[comp.ci] = b.querySelector('.v');
   }
   $('selname').textContent = '→ ' + m.comps[S.sel].name;
+  syncCxUI();
   updateDiag();
+}
+
+/** «импульс» имеет смысл только там, где есть фаза — у комплексного поля.
+    Заодно подсказка на графике объясняет, что нарисована не сама ψ, а её модуль:
+    без этого цветная кривая читается как «что-то непонятное». */
+function syncCxUI() {
+  const cx = !!(sim.model && sim.model.comps[S.sel].complex);
+  $('k0row').style.display = cx ? '' : 'none';
+  $('hint').textContent = cx
+    ? 'кривая — |ψ|, цвет — фаза · тяни' + (mob.matches ? ' пальцем' : ' мышью') + ': ↕ амплитуда, ↔ ширина'
+    : (mob.matches ? 'тяни пальцем: ↕ амплитуда, ↔ ширина'
+                   : 'тяни мышью: ↕ амплитуда, ↔ ширина · колесо — ширина · Alt — добавить');
 }
 
 /* ---- параметры: логарифмический ползунок ---- */
@@ -661,8 +810,14 @@ function normEq(s) {
   return s.split(/[\n;]+/).map(l => l.trim()).filter(l => l && l[0] !== '#')
           .join('\n').replace(/[ \t]+/g, '');
 }
+/** Один и тот же текст может стоять у нескольких пресетов: три задачи Шрёдингера
+ *  различаются не уравнением, а начальными данными (импульс, два пакета). Поэтому
+ *  выбранный пресет липкий: пока его текст совпадает, список остаётся на нём, и
+ *  только иначе берётся первый подходящий. Без этого загрузка «двух пакетов»
+ *  тут же переписывала бы заголовок на «расплывание пакета». */
 function matchPreset(text) {
-  const n = normEq(text);
+  const n = normEq(text), cur = +$('preset').value;
+  if (cur >= 0 && PRESETS[cur] && normEq(PRESETS[cur].eq) === n) return cur;
   for (let i = 0; i < PRESETS.length; i++) if (normEq(PRESETS[i].eq) === n) return i;
   return -1;
 }
@@ -688,7 +843,7 @@ const GREEK = { alpha:'α', beta:'β', gamma:'γ', delta:'δ', eps:'ε', epsilon
   rho:'ρ', sigma:'σ', tau:'τ', phi:'φ', chi:'χ', psi:'ψ', omega:'ω' };
 const EQFUNCS = { sin:1, cos:1, tan:1, exp:1, log:1, sqrt:1, abs:1,
                   tanh:1, sinh:1, cosh:1, sech:1, sign:1 };
-const EQCONSTS = { x:1, t:1, pi:1, e:1 };
+const EQCONSTS = { x:1, t:1, pi:1, e:1, i:1 };
 
 /* цвет поля — тот же, что у его кривой на графике (порядок полей даёт scanFields) */
 function fieldColor(f, fields) {
@@ -750,6 +905,7 @@ function mathNode(n, F) {
     case 'num':  return box(numHTML(n.v));
     case 'x':    return box('<i class="cn">x</i>');
     case 'time': return box('<i class="cn">t</i>');
+    case 'imag': return box('<i class="cn">i</i>');
     case 'par':  return box('<i>' + escHTML(GREEK[n.name] || n.name) + '</i>');
     case 'd': {
       const sub = n.dt ? 't'.repeat(n.dt) : 'x'.repeat(n.dx);
@@ -1199,7 +1355,7 @@ $('stepb').onclick = () => {
 };
 $('reset').onclick = () => {
   S.running = false; syncPlay();          // сброс всегда ставит на паузу: иначе t=0 промелькнёт
-  for (let c = 0; c < sim.M; c++) if (S.ic[c]) sim.setU(c, S.ic[c]);
+  for (let c = 0; c < sim.M; c++) if (S.ic[c]) sim.setU(c, S.ic[c], S.icI[c]);
   sim.t = 0; S.dead = false; clearXT(); refreshDt(true); draw();
 };
 $('zero').onclick = () => commit(new Float64Array(sim.N), false);
@@ -1244,6 +1400,7 @@ $('speed').addEventListener('click', e => {
   syncSpeed();
 });
 buildSpeed();
+$('k0').oninput = () => S.k0 = +$('k0').value || 0;
 $('wid').oninput = () => S.width = Math.max(1e-3, +$('wid').value);
 $('edge').oninput = () => S.edge = Math.max(1e-3, +$('edge').value);
 $('addm').onchange = () => S.add = $('addm').checked;
@@ -1255,17 +1412,22 @@ $('ymax').oninput = () => { S.yMax = +$('ymax').value; S.autoY = false; $('autoy
 
 function regrid() {
   const N = +$('N').value, L = Math.max(0.1, +$('L').value);
-  const oldN = sim.N, old = sim.model.comps.map(c => Float64Array.from(sim.getU(c.ci)));
+  const oldN = sim.N;
+  const old = sim.model.comps.map(c => Float64Array.from(sim.getU(c.ci)));
+  const oldI = sim.model.comps.map(c => c.complex ? Float64Array.from(sim.getUi(c.ci)) : null);
   sim.resize(N, L);
-  for (let c = 0; c < sim.M; c++) {
-    const nu = new Float64Array(N);
+  // пересадка на новую сетку линейной интерполяцией — мнимую часть тем же приёмом,
+  // иначе смена N у комплексного поля стирала бы фазу
+  const resample = src => {
+    const out = new Float64Array(N);
     for (let j = 0; j < N; j++) {
       const q = j*oldN/N, i0 = Math.floor(q) % oldN, f = q - Math.floor(q);
-      nu[j] = old[c][i0]*(1-f) + old[c][(i0+1)%oldN]*f;
+      out[j] = src[i0]*(1-f) + src[(i0+1)%oldN]*f;
     }
-    sim.setU(c, nu);
-    S.ic[c] = Float64Array.from(sim.getU(c));
-  }
+    return out;
+  };
+  for (let c = 0; c < sim.M; c++)
+    setIC(c, resample(old[c]), oldI[c] ? resample(oldI[c]) : null);
   clearXT(); refreshDt(true); draw();
 }
 $('N').onchange = regrid;
@@ -1405,16 +1567,17 @@ function loadPreset(p) {
   sim.resize(p.N, p.L);
   $('eq').value = p.eq;
   autosizeEq();
-  S.sel = 0; S.ic = []; S.vis = [];
+  S.sel = 0; S.ic = []; S.icI = []; S.vis = [];
+  S.k0 = p.k0 || 0; $('k0').value = S.k0;
   if (!applySystem(p.eq, Object.assign({}, p.p || {}))) return;
   S.autodt = true; $('autodt').checked = true;
   S.yMin = p.y[0]; S.yMax = p.y[1];
   $('ymin').value = S.yMin; $('ymax').value = S.yMax;
   for (const comp of sim.model.comps) {
     const d = p.ic[comp.name];
-    const arr = d ? makeProfile(Object.assign({ x0:0, edge:S.edge }, d)) : new Float64Array(sim.N);
-    sim.setU(comp.ci, arr);
-    S.ic[comp.ci] = Float64Array.from(sim.getU(comp.ci));
+    const q = d ? makeIC(Object.assign({ x0:0, edge:S.edge }, d), comp.complex)
+                : { re:new Float64Array(sim.N), im:null };
+    setIC(comp.ci, q.re, q.im);
   }
   const first = p.ic[sim.model.comps[0].name];
   if (first && first.tool) {
@@ -1446,9 +1609,7 @@ function loadPreset(p) {
 function relayout() {
   const spd = $('speedbox'), home = mob.matches ? $('spdhome') : $('barspd');
   if (spd.parentNode !== home) home.appendChild(spd);
-  $('hint').textContent = mob.matches
-    ? 'тяни пальцем: ↕ амплитуда, ↔ ширина'
-    : 'тяни мышью: ↕ амплитуда, ↔ ширина · колесо — ширина · Alt — добавить';
+  syncCxUI();                                 // текст подсказки зависит и от экрана, и от поля
   if (!mob.matches) openSheet(false);         // вернулись на десктоп — панель снова на месте
 }
 

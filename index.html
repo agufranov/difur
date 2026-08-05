@@ -175,6 +175,11 @@
   .lgd.sel{background:rgba(90,209,255,.12);box-shadow:inset 2px 0 0 currentColor}
   .lgd .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
   .lgd .dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.5}
+  /* комплексное поле: колечко фазы — оно же расшифровка цвета кривой на графике */
+  .lgd .dot.ph{width:11px;height:11px;background:
+    conic-gradient(hsl(0 85% 62%),hsl(60 85% 62%),hsl(120 85% 62%),hsl(180 85% 62%),
+                   hsl(240 85% 62%),hsl(300 85% 62%),hsl(360 85% 62%))}
+  .lgd .dot.ph.off{opacity:.35;box-shadow:none}
   .lgd .nm{color:var(--txt);min-width:2.1em}
   .lgd.off .nm{opacity:.45}
   .lgd .v{margin-left:auto;color:var(--dim);white-space:nowrap}
@@ -448,6 +453,10 @@
       <div class="row"><label>ширина</label><input type="number" id="wid" value="2" step="0.1" min="0.01"></div>
       <div class="row"><label>край</label><input type="number" id="edge" value="0.4" step="0.05" min="0.01"
         title="сглаживание фронта ступеньки"></div>
+      <!-- виден только у комплексного поля: у вещественного фазы нет (см. syncCxUI) -->
+      <div class="row" id="k0row" style="display:none"><label>импульс k₀</label>
+        <input type="number" id="k0" value="0" step="0.5"
+          data-tip="Импульс пакета|Нарисованный профиль — это модуль |ψ|, а k₀ задаёт фазу e^{ik₀x}: пакет поедет со скоростью 2k₀ и будет расплываться на ходу. Без него можно нарисовать только неподвижный пакет."></div>
       <label class="chk"><input type="checkbox" id="addm">складывать с текущим (Alt)</label>
       <label class="chk"><input type="checkbox" id="live">рисовать на ходу (не сбрасывать t)</label>
       <div class="grid2" style="margin-top:6px">
@@ -501,6 +510,10 @@
         Остальные буквы — константы с ползунком (логарифмическая шкала).
         Ещё есть <code>x, t, pi</code>, функции <code>sin cos exp tanh sech abs sqrt</code>,
         степени <code>u^2</code>. Границы периодические.<br>
+        <b>i</b> — мнимая единица: <code>ut = i*uxx</code> это Шрёдингер. У такого поля
+        на графике рисуется <b>|ψ|</b>, а цвет вдоль кривой — фаза; «импульс k₀»
+        задаёт e<sup>ik₀x</sup>, и пакет едет со скоростью 2k₀. Пока <code>i</code>
+        работает только в линейной части с постоянными коэффициентами.<br>
         <kbd>пробел</kbd> пуск/пауза · <kbd>R</kbd> сброс (счёт останавливается)
       </div>
       </details>
