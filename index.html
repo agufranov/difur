@@ -188,6 +188,21 @@
        padding:9px 11px 11px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.28)}
   h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;
      color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px}
+  /* свёрнутые разделы: внутренности численного метода и справка не должны мозолить
+     глаз, но и прятаться совсем не должны — треугольник виден всегда, разворот
+     одним кликом. Родной маркер `<summary>` убран: он рисуется слева и ломает
+     единый вид заголовков-островов. */
+  summary{cursor:pointer;user-select:none;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary h3{margin:0}
+  details[open]>summary h3{margin-bottom:8px}
+  summary h3::after,.fine>summary::after{content:"▸";float:right;color:var(--dim)}
+  details[open]>summary h3::after,.fine[open]>summary::after{content:"▾"}
+  .fine{margin-top:9px}
+  .fine>summary{color:var(--dim);font-size:11px;text-transform:uppercase;
+                letter-spacing:1.2px;font-weight:600;
+                border-top:1px solid var(--line);padding-top:8px}
+  .fine[open]>summary{margin-bottom:4px}
   .row{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
   .row>label{color:var(--dim);min-width:78px}
   .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
@@ -423,17 +438,8 @@
       <div id="sheeth"><span class="grab"></span><b>Настройки</b><button id="sheetx">готово</button></div>
 
       <section class="isl">
-      <h3>Управление</h3>
-      <!-- #spdhome — место скорости на телефоне: в нижней строке шесть кнопок «×N»
-           не помещаются, поэтому relayout() переносит сам узел #speedbox сюда -->
-      <div id="spdhome"></div>
-      <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="2000" step="1"></div>
-      <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
-      <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
-      <label class="chk"><input type="checkbox" id="coarsedt"
-        data-tip="Крупный шаг|Автоподбор берёт dt вдвое крупнее: ещё ×2 к скорости почти даром. Замерено на солитоне КдФ: отн. ошибка 1.8e-5 → 3.9e-4, глазом не видно. Если «Δ за шаг» покраснел — выключи.">крупный шаг (вдвое, чуть грубее)</label>
-      <button id="smooth" style="width:100%;margin-top:4px"
-        data-tip="Гасить осцилляции опрокидывания|Когда горб опрокидывается, решение становится разрывным, а ряд Фурье отвечает на разрыв пилой на всю сетку. Кнопка добавляет гипервязкость в верхушку спектра — пила гаснет, разрыв размазывается на пару ячеек. Это меняет задачу: смотри «гашение» в диагностике.">∿ гасить осцилляции</button>
+      <h3>Параметры уравнения</h3>
+      <div id="pars"><div class="note">нет — добавь буквенный коэффициент, например <code>ut + u*ux = nu*uxx</code></div></div>
       </section>
 
       <section class="isl">
@@ -451,18 +457,6 @@
       </section>
 
       <section class="isl">
-      <h3>Параметры уравнения</h3>
-      <div id="pars"><div class="note">нет — добавь буквенный коэффициент, например <code>ut + u*ux = nu*uxx</code></div></div>
-      </section>
-
-      <section class="isl">
-      <h3>Сетка</h3>
-      <div class="row"><label>узлов N</label>
-        <select id="N"><option>128</option><option>256</option><option selected>512</option><option>1024</option><option>2048</option></select></div>
-      <div class="row"><label>период L</label><input type="number" id="L" value="40" step="1" min="1"></div>
-      </section>
-
-      <section class="isl">
       <h3>Вид</h3>
       <label class="chk"><input type="checkbox" id="autoy" checked>автомасштаб по u</label>
       <div class="row"><label>u от … до</label></div>
@@ -471,8 +465,32 @@
       <label class="chk" style="margin-top:6px"><input type="checkbox" id="showic" checked>показывать начальное условие</label>
       </section>
 
+      <!-- Схема счёта. Наверху то, что трогают, глядя на кривую; сетка и шаг —
+           в свёрнутой «тонкой настройке»: это внутренности численного метода,
+           а не постановка задачи, и в глаза они лезть не должны. -->
       <section class="isl">
-      <h3>Шпаргалка</h3>
+      <h3>Схема счёта</h3>
+      <!-- #spdhome — место скорости на телефоне: в нижней строке шесть кнопок «×N»
+           не помещаются, поэтому relayout() переносит сам узел #speedbox сюда.
+           На десктопе этот div пуст и не занимает ничего. -->
+      <div id="spdhome"></div>
+      <button id="smooth" style="width:100%"
+        data-tip="Гасить осцилляции опрокидывания|Когда горб опрокидывается, решение становится разрывным, а ряд Фурье отвечает на разрыв пилой на всю сетку. Кнопка добавляет гипервязкость в верхушку спектра — пила гаснет, разрыв размазывается на пару ячеек. Это меняет задачу: смотри «гашение» в нижней строке.">∿ гасить осцилляции</button>
+      <details class="fine">
+      <summary>сетка и шаг</summary>
+      <div class="row"><label>узлов N</label>
+        <select id="N"><option>128</option><option>256</option><option selected>512</option><option>1024</option><option>2048</option></select></div>
+      <div class="row"><label>период L</label><input type="number" id="L" value="40" step="1" min="1"></div>
+      <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
+      <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
+      <label class="chk"><input type="checkbox" id="coarsedt"
+        data-tip="Крупный шаг|Автоподбор берёт dt вдвое крупнее: ещё ×2 к скорости почти даром. Замерено на солитоне КдФ: отн. ошибка 1.8e-5 → 3.9e-4, глазом не видно. Если «Δ за шаг» покраснел — выключи.">крупный шаг (вдвое, чуть грубее)</label>
+      <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="2000" step="1"></div>
+      </details>
+      </section>
+
+      <details class="isl">
+      <summary><h3>Шпаргалка</h3></summary>
       <div class="note">
         Каждое уравнение — с новой строки. Поля — <b>одиночные буквы</b>, у которых есть
         производная по времени: <code>ut</code>, <code>vt</code>, <code>ztt</code>.
@@ -485,7 +503,7 @@
         степени <code>u^2</code>. Границы периодические.<br>
         <kbd>пробел</kbd> пуск/пауза · <kbd>R</kbd> сброс (счёт останавливается)
       </div>
-      </section>
+      </details>
     </aside>
   </main>
 

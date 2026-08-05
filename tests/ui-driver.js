@@ -353,9 +353,20 @@ steps.push(() => {
 steps.push(() => {
   const isl = document.querySelectorAll('aside .isl');
   const heads = [...document.querySelectorAll('aside h3')];
-  ck('разделы панели — острова', isl.length === 6, 'островов=' + isl.length);
-  ck('каждый заголовок внутри острова', heads.length === 6 && heads.every(h => h.closest('.isl')),
+  ck('разделы панели — острова', isl.length === 5, 'островов=' + isl.length);
+  ck('каждый заголовок внутри острова', heads.length === 5 && heads.every(h => h.closest('.isl')),
      'заголовков=' + heads.length);
+  // сетка и шаг — внутренности численного метода: они в панели есть, но свёрнуты,
+  // и открываются одним кликом по «сетка и шаг»
+  // checkVisibility(), а не offsetParent и не высота: закрытый <details> свежий
+  // Chromium прячет через content-visibility, и коробка с прежним размером у
+  // содержимого остаётся — по ней раздел кажется открытым
+  const fine = document.querySelector('aside details.fine');
+  const vis = () => $('N').checkVisibility();
+  ck('сетка и шаг свёрнуты', !!fine && !fine.open && !vis(),
+     fine ? 'open=' + fine.open + ' N виден=' + vis() : 'нет раздела');
+  fine.querySelector('summary').click();
+  ck('раздел раскрывается кликом', fine.open && vis(), 'open=' + fine.open + ' N виден=' + vis());
   const bg = getComputedStyle(isl[0]).backgroundColor, asideBg = getComputedStyle($('app').querySelector('aside')).backgroundColor;
   ck('фон острова отличается от фона панели', bg !== asideBg, bg + ' vs ' + asideBg);
 });

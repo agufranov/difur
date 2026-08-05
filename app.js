@@ -485,6 +485,7 @@ function updateDiag() {
   // тревога вытесняет числа. Счёт, вставший молча и без объяснения, — худшее,
   // что может случиться, поэтому важнее всего именно она.
   const bt = $('bart'), bm = $('barmsg'), phone = mob.matches;
+  if (phone) h = 't ' + q(d.t.toFixed(2)) + ' · Δ ' + q(f(d.perStep, 2));  // короче — иначе обрежется
   if (phone && st) { bt.textContent = S.dead ? 'решение разошлось' : st; bt.style.color = col; }
   else { bt.innerHTML = h; bt.style.color = ''; }
   bm.textContent = phone ? '' : st;
