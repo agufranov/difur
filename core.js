@@ -65,7 +65,34 @@ class FFT {
 
 const FUNCS = { sin:1, cos:1, tan:1, exp:1, log:1, sqrt:1, abs:1,
                 tanh:1, sinh:1, cosh:1, sech:1, sign:1 };
-const RESERVED = { x:1, t:1, e:1, pi:1 };
+const RESERVED = { x:1, t:1, e:1, pi:1, i:1 };
+
+/* ================= комплексные числа =================
+   Нужны ровно в одном месте — в свёртке констант, чтобы `i` дожила от текста
+   уравнения до коэффициента диагонального символа. Ни состояние, ни кодогенерация
+   этих объектов не видят: состояние и так лежит парой массивов re/im, а в явную
+   часть комплексный коэффициент попасть не может (проверяется в buildSystem). */
+const CX = (re, im) => ({ re, im: im || 0 });
+const cxAdd = (a, b) => CX(a.re + b.re, a.im + b.im);
+const cxSub = (a, b) => CX(a.re - b.re, a.im - b.im);
+const cxNeg = a => CX(-a.re, -a.im);
+const cxMul = (a, b) => CX(a.re*b.re - a.im*b.im, a.re*b.im + a.im*b.re);
+const cxDiv = (a, b) => {
+  const d = b.re*b.re + b.im*b.im;
+  return CX((a.re*b.re + a.im*b.im)/d, (a.im*b.re - a.re*b.im)/d);
+};
+const cxAbs = a => Math.hypot(a.re, a.im);
+const isReal = a => a.im === 0;
+/** целая степень — точно, повторным умножением: `i^2` обязана дать ровно -1,
+    а через exp/log вышло бы -1 + 1.2e-16i, и поле стало бы «комплексным» */
+function cxPow(a, b) {
+  if (!isReal(b)) throw new Error('не константа');
+  if (isReal(a)) return CX(Math.pow(a.re, b.re));
+  if (b.re !== Math.round(b.re)) throw new Error('не константа');
+  let n = Math.abs(b.re), r = CX(1, 0);
+  for (let q = 0; q < n; q++) r = cxMul(r, a);
+  return b.re < 0 ? cxDiv(CX(1, 0), r) : r;
+}
 
 /** ошибка с координатами куска текста, на который она указывает (для подсветки) */
 function span(e, pos, len) {
@@ -188,6 +215,7 @@ function parseOne(src, fields, warn) {
       if (name === 't') return { k:'time' };
       if (name === 'pi') return { k:'num', v:Math.PI };
       if (name === 'e') return { k:'num', v:Math.E };
+      if (name === 'i') return { k:'imag' };
       let parts;
       try { parts = splitAtoms(name, fields); }
       catch (e) { throw span(e, tk.i, tk.j - tk.i); }
@@ -227,42 +255,47 @@ function contains(node, pred) {
   walk(node, n => { if (pred(n)) f = true; });
   return f;
 }
+/** значение константного выражения — всегда комплексное (у вещественного im === 0) */
 function constVal(node, P) {
   switch (node.k) {
-    case 'num': return node.v;
+    case 'num': return CX(node.v);
+    case 'imag': return CX(0, 1);
     case 'par':
       if (!(node.name in P)) throw new Error('Неизвестный параметр ' + node.name);
-      return P[node.name];
-    case 'add': return constVal(node.a,P) + constVal(node.b,P);
-    case 'sub': return constVal(node.a,P) - constVal(node.b,P);
-    case 'mul': return constVal(node.a,P) * constVal(node.b,P);
-    case 'div': return constVal(node.a,P) / constVal(node.b,P);
-    case 'pow': return Math.pow(constVal(node.a,P), constVal(node.b,P));
-    case 'neg': return -constVal(node.a,P);
+      return CX(P[node.name]);
+    case 'add': return cxAdd(constVal(node.a,P), constVal(node.b,P));
+    case 'sub': return cxSub(constVal(node.a,P), constVal(node.b,P));
+    case 'mul': return cxMul(constVal(node.a,P), constVal(node.b,P));
+    case 'div': return cxDiv(constVal(node.a,P), constVal(node.b,P));
+    case 'pow': return cxPow(constVal(node.a,P), constVal(node.b,P));
+    case 'neg': return cxNeg(constVal(node.a,P));
     case 'fn': { const v = constVal(node.a,P);
-      return node.name === 'sech' ? 1/Math.cosh(v) : Math[node.name](v); }
+      if (!isReal(v)) throw new Error('не константа');   // sin(i) и прочее — не наш случай
+      return CX(node.name === 'sech' ? 1/Math.cosh(v.re) : Math[node.name](v.re)); }
     default: throw new Error('не константа');
   }
 }
 function tryConst(node, P) { try { return constVal(node, P); } catch (e) { return null; } }
 
-/** c · ∂ₓⁿ(компонента) ?  ci(node) отображает атом в номер компоненты */
+/** c · ∂ₓⁿ(компонента) ?  ci(node) отображает атом в номер компоненты.
+    Коэффициент `c` комплексный: `i*uxx` — такой же диагональный член, как `2*uxx`. */
 function asLinear(node, P, ci) {
   switch (node.k) {
-    case 'd': { const c = ci(node); return c < 0 ? null : { c:1, ci:c, n:node.dx }; }
-    case 'neg': { const r = asLinear(node.a,P,ci); return r ? { c:-r.c, ci:r.ci, n:r.n } : null; }
+    case 'd': { const c = ci(node); return c < 0 ? null : { c:CX(1), ci:c, n:node.dx }; }
+    case 'neg': { const r = asLinear(node.a,P,ci); return r ? { c:cxNeg(r.c), ci:r.ci, n:r.n } : null; }
     case 'mul': {
       const ra = asLinear(node.a,P,ci), rb = asLinear(node.b,P,ci);
-      if (ra && !rb) { const c = tryConst(node.b,P); return c === null ? null : { c:ra.c*c, ci:ra.ci, n:ra.n }; }
-      if (rb && !ra) { const c = tryConst(node.a,P); return c === null ? null : { c:rb.c*c, ci:rb.ci, n:rb.n }; }
+      if (ra && !rb) { const c = tryConst(node.b,P); return c === null ? null : { c:cxMul(ra.c,c), ci:ra.ci, n:ra.n }; }
+      if (rb && !ra) { const c = tryConst(node.a,P); return c === null ? null : { c:cxMul(rb.c,c), ci:rb.ci, n:rb.n }; }
       return null;
     }
     case 'div': {
       const ra = asLinear(node.a,P,ci); if (!ra) return null;
       const c = tryConst(node.b,P);
-      return (c === null || c === 0) ? null : { c:ra.c/c, ci:ra.ci, n:ra.n };
+      return (c === null || cxAbs(c) === 0) ? null : { c:cxDiv(ra.c,c), ci:ra.ci, n:ra.n };
     }
-    case 'pow': { const e = tryConst(node.b,P); return e === 1 ? asLinear(node.a,P,ci) : null; }
+    case 'pow': { const e = tryConst(node.b,P);
+      return (e && isReal(e) && e.re === 1) ? asLinear(node.a,P,ci) : null; }
     default: return null;
   }
 }
@@ -279,16 +312,18 @@ function coefOfAtom(node, isT, P) {
     }
   };
   switch (node.k) {
-    case 'd': if (isT(node)) return 1; break;
-    case 'neg': return -coefOfAtom(node.a, isT, P);
+    // коэффициент комплексный: `i*ut = -uxx` — это тот же Шрёдингер, просто записанный
+    // так, как его пишут физики, и делить на `i` мы обязаны уметь
+    case 'd': if (isT(node)) return CX(1); break;
+    case 'neg': return cxNeg(coefOfAtom(node.a, isT, P));
     case 'mul': {
       const a = has(node.a), b = has(node.b);
-      if (a && !b) return coefOfAtom(node.a,isT,P) * cst(node.b);
-      if (b && !a) return coefOfAtom(node.b,isT,P) * cst(node.a);
+      if (a && !b) return cxMul(coefOfAtom(node.a,isT,P), cst(node.b));
+      if (b && !a) return cxMul(coefOfAtom(node.b,isT,P), cst(node.a));
       break;
     }
     case 'div':
-      if (has(node.a) && !has(node.b)) return coefOfAtom(node.a,isT,P) / cst(node.b);
+      if (has(node.a) && !has(node.b)) return cxDiv(coefOfAtom(node.a,isT,P), cst(node.b));
       break;
   }
   throw new Error('Старшая производная по времени должна входить линейно, с постоянным коэффициентом');
@@ -309,6 +344,8 @@ function gen(node, ci) {
     case 'pow': return 'Math.pow(' + gen(node.a,ci) + ',' + gen(node.b,ci) + ')';
     case 'neg': return '(-' + gen(node.a,ci) + ')';
     case 'fn':  return (node.name === 'sech' ? 'sech(' : 'Math.' + node.name + '(') + gen(node.a,ci) + ')';
+    // сеть безопасности: buildSystem обязан отловить это раньше и с внятным текстом
+    case 'imag': throw new Error('Мнимая единица в явной части');
     default: throw new Error('не могу сгенерировать код');
   }
 }
@@ -395,28 +432,31 @@ function buildSystem(text, params) {
   for (const c of comps) c.terms = [];
   for (const f of fields) {
     const m = order[f];
-    for (let d = 0; d < m - 1; d++)                      // цепочка понижения порядка
-      comps[index[f + ':' + d]].terms.push({ node:{ k:'d', f, dt:d+1, dx:0 }, coef:1 });
-
     const eq = owner[f];
+    for (let d = 0; d < m - 1; d++)                      // цепочка понижения порядка
+      comps[index[f + ':' + d]].terms.push({ node:{ k:'d', f, dt:d+1, dx:0 }, coef:CX(1),
+                                             at:eq.at, len:eq.len });
+
     const terms = [];
     flatten(eq.ast, 1, terms);
     const isT = n => n.k === 'd' && n.f === f && n.dt === m && n.dx === 0;
-    let a = 0;
+    let a = CX(0);
     const rest = [];
     for (const it of terms) {
       if (!contains(it.node, isT)) { rest.push(it); continue; }
-      try { a += it.sign * coefOfAtom(it.node, isT, P); }
+      try { a = cxAdd(a, cxMul(CX(it.sign), coefOfAtom(it.node, isT, P))); }
       catch (e) { throw span(e, eq.at, eq.len); }
     }
-    if (Math.abs(a) < 1e-14) throw errAt('Уравнение «' + eq.src + '» не разрешается относительно ' +
-                                         f + 't'.repeat(m), eq.at, eq.len);
+    if (cxAbs(a) < 1e-14) throw errAt('Уравнение «' + eq.src + '» не разрешается относительно ' +
+                                      f + 't'.repeat(m), eq.at, eq.len);
     const top = comps[index[f + ':' + (m-1)]];
     for (const it of rest) {
       if (contains(it.node, isTopAtom))
         throw errAt('Неявная система: в уравнении «' + eq.src +
                     '» старшая производная другого поля стоит не сама по себе', eq.at, eq.len);
-      top.terms.push({ node: it.node, coef: -it.sign / a });
+      // коэффициент комплексный, если комплексна старшая производная по времени:
+      // «i*ut = -uxx» даёт ut = i*uxx ровно здесь
+      top.terms.push({ node: it.node, coef: cxDiv(CX(-it.sign), a), at:eq.at, len:eq.len });
     }
   }
 
@@ -427,13 +467,45 @@ function buildSystem(text, params) {
     c.linear = []; c.explicit = []; c.orders = [];
     for (const it of c.terms) {
       const r = asLinear(it.node, P, ci);
-      if (r && r.ci === c.ci) { c.linear.push({ c: it.coef * r.c, n: r.n }); continue; }
-      if (r) cross.push({ row:c.ci, col:r.ci, c: it.coef * r.c, n: r.n });
+      if (r && r.ci === c.ci) { c.linear.push({ c: cxMul(it.coef, r.c), n: r.n }); continue; }
+      if (r) cross.push({ row:c.ci, col:r.ci, c: cxMul(it.coef, r.c), n: r.n });
       c.explicit.push(it);
     }
     c.hasExplicit = c.explicit.length > 0;
     if (c.hasExplicit) anyExplicit = true;
   }
+
+  /* Комплексна ли компонента.
+     Вещественность решения держится на эрмитовой симметрии символа:
+     S(-k) = conj(S(k)). У вещественного коэффициента `c·(ik)^n` она есть при любом
+     n — поэтому `uxxx` у КдФ с чисто мнимым символом `i·k³` даёт вещественное
+     решение. Мнимый коэффициент её ломает: `i·(ik)²` при -k даёт то же самое, а не
+     сопряжённое. Отсюда критерий: компонента комплексна тогда и только тогда,
+     когда хоть у одного её диагонального коэффициента ненулевая мнимая часть. */
+  for (const c of comps) c.complex = c.linear.some(l => l.c.im !== 0);
+  const anyComplex = comps.some(c => c.complex);
+
+  /* Контракт первого этапа: `i` живёт только в диагональной линейной части.
+     Явная часть — это кодогенерация в арифметике над double (`gen`), она про
+     комплексные числа не знает вовсе: нелинейность, потенциал V(x) и связи между
+     компонентами (включая цепочку понижения порядка) пришлось бы переписать
+     парами re/im. Поэтому здесь честная ошибка, а не молча взятая вещественная часть. */
+  const NOPE = 'Мнимая единица пока работает только в линейной части с постоянными ' +
+               'коэффициентами (ut = i*uxx). Нелинейность, потенциал от x, связи между ' +
+               'полями и производные по времени выше первой с ней пока нельзя';
+  for (const c of comps)
+    for (const it of c.explicit) {
+      // сама `i` внутри явного члена ловится всегда, даже если диагональный символ
+      // вещественный: у `utt = i*uxx` мнимая единица сидит именно в связи между
+      // компонентами, и без этой проверки ошибка прилетела бы из кодогенерации,
+      // без позиции и без объяснения
+      let hits = c.complex;
+      walk(it.node, n => {
+        if (n.k === 'imag') hits = true;
+        if (n.k === 'd') { const j = ci(n); if (j >= 0 && comps[j].complex) hits = true; }
+      });
+      if (hits) throw errAt(NOPE, it.at, it.len);
+    }
 
   // какие производные каких компонент нужны в физическом пространстве
   const need = comps.map(() => new Set());
@@ -450,7 +522,8 @@ function buildSystem(text, params) {
       if (!c.hasExplicit) continue;
       let e = '0';
       for (const it of c.explicit) {
-        e += '+(' + it.coef + ')*' + gen(it.node, ci);
+        // мнимых коэффициентов здесь быть уже не может — проверено выше
+        e += '+(' + it.coef.re + ')*' + gen(it.node, ci);
         walk(it.node, n => { if (n.k === 'time') usesTime = true; });
       }
       body += ' O[' + c.ci + '][i]=' + e + ';\n';
@@ -473,7 +546,8 @@ function buildSystem(text, params) {
   }
 
   return { source:text, fields, order, comps, index, ci, cross, nonlin:fn,
-           params:P, paramNames:pars, warnings:warns, maxOrder, usesTime };
+           params:P, paramNames:pars, warnings:warns, maxOrder, usesTime,
+           complex:anyComplex };
 }
 
 /* ================= φ-функции (комплексные) ================= */
@@ -548,7 +622,7 @@ class Sim {
     this.ar = mk(); this.ai = mk(); this.br = mk(); this.bi = mk(); this.cr = mk(); this.ci_ = mk();
     this.Nvr = mk(); this.Nvi = mk(); this.Nar = mk(); this.Nai = mk();
     this.Nbr = mk(); this.Nbi = mk(); this.Ncr = mk(); this.Nci = mk();
-    this.U = mk(); this.OUT = mk();
+    this.U = mk(); this.Ui = mk(); this.OUT = mk();
     this.Er = mk(); this.Ei = mk(); this.E2r = mk(); this.E2i = mk();
     this.Qr = mk(); this.Qi = mk();
     this.f1r = mk(); this.f1i = mk(); this.f2r = mk(); this.f2i = mk();
@@ -568,14 +642,14 @@ class Sim {
     this.model = m;
     this._alloc(m.comps.length);
 
-    // диагональные символы
+    // диагональные символы: c·(ik)^n, коэффициент c комплексный (у `i*uxx` он i)
     for (const c of m.comps) {
       const Sr = this.Sr[c.ci], Si = this.Si[c.ci];
       for (const l of c.linear)
         for (let j = 0; j < N; j++) {
           let pr = 1, pi = 0;
           for (let q = 0; q < l.n; q++) { const nr = -pi*this.k[j], ni = pr*this.k[j]; pr = nr; pi = ni; }
-          Sr[j] += l.c*pr; Si[j] += l.c*pi;
+          Sr[j] += l.c.re*pr - l.c.im*pi; Si[j] += l.c.re*pi + l.c.im*pr;
         }
     }
     // (ik)^n для нужных производных
@@ -621,7 +695,7 @@ class Sim {
       m.cross.forEach((e, q0) => {                       // c·(ik)^n
         let pr = 1, pi = 0;
         for (let q = 0; q < e.n; q++) { const nr = -pi*this.k[j], ni = pr*this.k[j]; pr = nr; pi = ni; }
-        er[q0] = e.c*pr; ei[q0] = e.c*pi;
+        er[q0] = e.c.re*pr - e.c.im*pi; ei[q0] = e.c.re*pi + e.c.im*pr;
       });
       for (let c = 0; c < M; c++) { wr[c] = 1/(c+1); wi[c] = 0; }
       let g = 1, steps = 0;
@@ -665,19 +739,29 @@ class Sim {
     }
   }
 
-  setU(c, arr) {
+  /** мнимая часть начальных данных необязательна: у вещественного поля её нет */
+  setU(c, arr, arrIm) {
     const N = this.N;
-    this.vr[c].set(arr); this.vi[c].fill(0);
+    this.vr[c].set(arr);
+    if (arrIm) this.vi[c].set(arrIm); else this.vi[c].fill(0);
     this.fft.forward(this.vr[c], this.vi[c]);
     for (let j = 0; j < N; j++) { this.vr[c][j] *= this.mask[j]; this.vi[c][j] *= this.mask[j]; }
     this._sync(c);
   }
+  /** Мнимую часть физического поля храним только у комплексных компонент.
+      У вещественных она равна нулю математически, а численно там болтается
+      мусор ~1e-17, и выбросить его — это проекция на инвариантное подпространство,
+      а не потеря: ровно так решатель вёл себя до появления `i`, и все эталоны
+      точности (КдФ 6e-9, ∫u dx на 1e-15) остаются те же бит в бит. */
   _sync(c) {
     this.tr.set(this.vr[c]); this.ti.set(this.vi[c]);
     this.fft.inverse(this.tr, this.ti);
     this.U[c].set(this.tr);
+    if (this.model.comps[c].complex) this.Ui[c].set(this.ti); else this.Ui[c].fill(0);
   }
   getU(c) { return this.U[c || 0]; }
+  getUi(c) { return this.Ui[c || 0]; }
+  isComplex(c) { return !!this.model.comps[c || 0].complex; }
 
   _explicit(vr, vi, outR, outI, T) {
     const N = this.N, m = this.model;
@@ -766,8 +850,8 @@ class Sim {
     }
     let U = 0;
     for (let c = 0; c < this.M; c++) {
-      const u = this.U[c];
-      for (let j = 0; j < N; j++) { const a = Math.abs(u[j]); if (!(a <= U)) U = a; }
+      const u = this.U[c], w = this.Ui[c];             // амплитуда по модулю: у комплексного поля мнимая часть такая же полноправная
+      for (let j = 0; j < N; j++) { const a = Math.hypot(u[j], w[j]); if (!(a <= U)) U = a; }
     }
     this.loss = 0;
     if (!(U > 0)) return;                       // пусто или уже NaN — гасить нечего
@@ -792,14 +876,18 @@ class Sim {
     const N = this.N, dx = this.L/N, per = [];
     let gmax = 0, bad = false;
     for (let c = 0; c < this.M; c++) {
-      const u = this.U[c];
+      const u = this.U[c], w = this.Ui[c], cx = this.model.comps[c].complex;
       let mx = 0, mass = 0, e2 = 0;
       for (let j = 0; j < N; j++) {
-        const a = Math.abs(u[j]);
+        // у комплексной компоненты «величина» — это модуль; у вещественной
+        // hypot(u,0) = |u|, поэтому ветка одна и прежние числа не меняются
+        const a = cx ? Math.hypot(u[j], w[j]) : Math.abs(u[j]);
         if (!(a <= mx)) mx = a;            // NaN протаскивается: NaN>mx дало бы false
-        mass += u[j]; e2 += u[j]*u[j];
+        mass += u[j]; e2 += a*a;
       }
-      per.push({ max:mx, mass:mass*dx, energy:0.5*e2*dx });
+      // norm = ∫|u|² dx. У Шрёдингера это сохраняющаяся норма — лучший индикатор
+      // того, что счёт идёт правильно, поэтому её видно в легенде
+      per.push({ max:mx, mass:mass*dx, energy:0.5*e2*dx, norm:e2*dx, complex:!!cx });
       // сравнения с NaN всегда ложны, поэтому здоровая компонента не должна
       // затирать разошедшуюся — держим отдельный флаг
       if (!(mx < Infinity)) bad = true;

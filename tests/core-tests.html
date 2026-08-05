@@ -362,6 +362,67 @@ const linf = (s, c, f) => { let e=0; const u=s.getU(c); for (let j=0;j<s.N;j++) 
   chk('источник sin(x)·t работает', mx>1e-4 && s.diagnostics().finite, 'max='+mx.toExponential(2));
 })();
 
+/* ---------- мнимая единица: свободный пакет Шрёдингера ----------
+   Проверяем аналитическими законами, а не сверкой с тем же FFT (она была бы
+   круговой): норма, закон расплывания и групповая скорость. Явной части у
+   `ut = i*uxx` нет вовсе, поэтому экспонента точна и числа выходят машинные. */
+(function(){
+  const N=1024, L=80, s0=2, k0=3;
+  const s = new Sim(); s.resize(N,L); const m = s.setSystem('ut = i*uxx', {}); s.setDt(0.002);
+  chk('i делает компоненту комплексной', m.comps[0].complex && m.complex, 'complex='+m.comps[0].complex);
+  chk('у свободного пакета нет явной части', !m.nonlin);
+
+  const re=new Float64Array(N), im=new Float64Array(N);
+  for(let j=0;j<N;j++){ const x=s.x[j], g=Math.exp(-x*x/(2*s0*s0));
+    re[j]=g*Math.cos(k0*x); im[j]=g*Math.sin(k0*x); }
+  s.setU(0,re,im);
+  const mom = () => { const u=s.getU(0), w=s.getUi(0), dx=L/N;
+    let n=0,mx=0,mx2=0;
+    for(let j=0;j<N;j++){ const p=u[j]*u[j]+w[j]*w[j], x=s.x[j]; n+=p; mx+=p*x; mx2+=p*x*x; }
+    const c=mx/n; return { norm:n*dx, mean:c, sigma:Math.sqrt(mx2/n-c*c) }; };
+
+  const q0 = mom();
+  chk('мнимая часть начальных данных дошла до поля',
+      Math.abs(q0.sigma - s0/Math.SQRT2) < 1e-9 && s.getUi(0).some(v=>v!==0),
+      'σ='+q0.sigma.toFixed(6));
+  s.advance(1000);                                   // t = 2
+  const q = mom();
+  // ħ=1, m=1/2 (так задано самим уравнением); ширина плотности |ψ|², то есть σ0=s0/√2
+  const v0 = s0*s0/2, sEx = Math.sqrt(v0*(1+(s.t/v0)**2));
+  chk('норма ∫|ψ|² сохраняется (эталон 1e-14)',
+      Math.abs(q.norm/q0.norm-1) < 1e-12, 'откл='+Math.abs(q.norm/q0.norm-1).toExponential(2));
+  chk('пакет расплывается по σ(t)=σ0√(1+(t/σ0²)²)',
+      Math.abs(q.sigma/sEx-1) < 1e-10, q.sigma.toFixed(6)+' против точных '+sEx.toFixed(6));
+  chk('центр едет с групповой скоростью 2k0',
+      Math.abs(q.mean - 2*k0*s.t) < 1e-10, q.mean.toFixed(6)+' против точных '+(2*k0*s.t).toFixed(6));
+})();
+
+/* ---------- мнимая единица: контракт и её отсутствие там, где не надо ---------- */
+(function(){
+  chk('i² = -1 ровно, поле остаётся вещественным',
+      !new Sim().setSystem('ut = i*i*uxx', {}).comps[0].complex);
+  chk('вещественная задача комплексной не становится',
+      !new Sim().setSystem('ut + u*ux + uxxx = 0', {}).complex);
+  // `i` вне диагональной линейной части обязана отвергаться внятно и с позицией,
+  // а не приходить необъяснимой ошибкой из кодогенерации
+  for (const [eq, what] of [['ut = i*uxx + i*abs(u)^2*u','нелинейность'],
+                            ['ut = i*uxx + i*sin(x)*u','потенциал от x'],
+                            ['utt = i*uxx','вторая производная по времени']]) {
+    let e = null; try { new Sim().setSystem(eq, {}); } catch (err) { e = err; }
+    chk('отвергается: ' + what,
+        e && /Мнимая единица пока работает/.test(e.message) && e.pos !== undefined,
+        e ? 'pos='+e.pos+' '+e.message.slice(0,32) : 'посчиталось молча');
+  }
+  // i*ut = -uxx — то же уравнение, записанное как пишут физики
+  const a = new Sim(); a.resize(256,20); a.setSystem('i*ut = -uxx', {}); a.setDt(0.001);
+  const b = new Sim(); b.resize(256,20); b.setSystem('ut = i*uxx', {}); b.setDt(0.001);
+  for (const s of [a,b]) { const re=new Float64Array(256), im=new Float64Array(256);
+    for(let j=0;j<256;j++){ re[j]=Math.exp(-s.x[j]*s.x[j]); } s.setU(0,re,im); s.advance(200); }
+  let d=0; for(let j=0;j<256;j++) d=Math.max(d, Math.abs(a.getU(0)[j]-b.getU(0)[j]),
+                                                Math.abs(a.getUi(0)[j]-b.getUi(0)[j]));
+  chk('«i*ut = -uxx» — то же, что «ut = i*uxx»', d<1e-14, 'расхождение='+d.toExponential(2));
+})();
+
 /* ---------- смена сетки ---------- */
 (function(){
   const s = mk('utt = c^2*uxx', {c:1}, 128, 20, 0.01);

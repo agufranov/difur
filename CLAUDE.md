@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 Guidance for Claude Code (claude.ai/code). Это оглавление: здесь только то, что
 нужно знать всегда. Подробности — в `docs/`, читать по указателю ниже, а не целиком.
@@ -44,7 +44,7 @@ Guidance for Claude Code (claude.ai/code). Это оглавление: здес
 ## Тесты
 
 ```powershell
-powershell -File tests\run.ps1     # всё: ядро + интерфейс, ~40 с, 240 строк PASS
+powershell -File tests\run.ps1     # всё: ядро + интерфейс, ~40 с, 252 строки PASS
 ```
 
 **Node на этой машине есть** — v24.18.1 через fnm, но в свежей оболочке его нет в
