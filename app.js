@@ -1163,6 +1163,9 @@ $('smooth').onclick = () => setSmooth(!S.smooth);
 $('play').onclick = () => { if (S.dead) return; S.running = !S.running; syncPlay(); };
 $('stepb').onclick = () => {
   if (S.dead) return;
+  // шаг — это «посмотреть по кадрам», поэтому он сначала останавливает счёт:
+  // иначе кадр анимации тут же затирает то, что хотели разглядеть
+  if (S.running) { S.running = false; syncPlay(); }
   const t0 = sim.t;
   for (let i = 0; i < S.spf; i++) sim.step();
   lastFrameDt = sim.t - t0;

@@ -57,7 +57,10 @@ steps.push(() => {
 
 /* --- счёт и диаграмма --- */
 steps.push(() => {
-  $('play').click(); ck('пуск включается', D.S.running); $('play').click();
+  $('play').click(); ck('пуск включается', D.S.running);
+  $('stepb').click();                      // шаг сам ставит на паузу: см. docs/ui.md
+  ck('шаг останавливает счёт', !D.S.running && $('play').dataset.icon === 'play',
+     'running=' + D.S.running + ' icon=' + $('play').dataset.icon);
   for (let i=0;i<8;i++) $('stepb').click();
   const d = D.sim.diagnostics();
   ck('время идёт', d.t>0, 't='+d.t.toFixed(4));

@@ -137,7 +137,11 @@
   button,select,input[type=number],input[type=text]{
     background:var(--panel2);border:1px solid var(--line);color:var(--txt);
     border-radius:6px;padding:5px 9px;font:inherit}
-  button{cursor:pointer;transition:.12s}
+  /* touch-action:manipulation — на телефоне частые тычки в «шаг» иначе читаются
+     как double-tap и браузер зумит страницу; user-select — чтобы вместо нажатия
+     не выделялась подпись кнопки */
+  button{cursor:pointer;transition:.12s;touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
   button:hover{border-color:var(--accent);color:#fff}
   button.on{background:#12384a;border-color:var(--accent);color:#fff}
   select{padding:5px 6px}
@@ -392,7 +396,7 @@
            сам узел #padbtns в нижнюю строку #barctl и обратно -->
       <div id="ctlhome"><div class="grid3" id="padbtns">
         <button id="play" class="big" data-tip="Пуск / пауза|Пробел на клавиатуре делает то же самое">▶</button>
-        <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз — не дожидаясь анимации">⏭</button>
+        <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз, вручную. Счёт при этом встаёт на паузу — чтобы кадр можно было разглядеть">⏭</button>
         <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
       </div></div>
       <div class="row"><label>скорость</label><div id="speed" class="seg"
