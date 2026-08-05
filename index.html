@@ -2,7 +2,8 @@
 <html lang="ru">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- viewport-fit=cover — чтобы env(safe-area-inset-*) не был нулём под чёлкой и полоской домой -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Дифуры 1D — псевдоспектральная песочница</title>
 <style>
   :root{
@@ -14,7 +15,9 @@
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--txt);
        font:13px/1.45 "Segoe UI",system-ui,sans-serif;overflow:hidden}
-  #app{display:flex;flex-direction:column;height:100vh}
+  /* dvh — потому что на телефоне 100vh считается без убирающейся адресной строки:
+     нижняя строка пульта уезжала бы под неё */
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
 
   header{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;
          background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
@@ -207,6 +210,107 @@
   #tip.dn::after{top:-5px;transform:rotate(-135deg)}
   #tip.lf::after{left:auto;right:-5px;margin-left:0;top:var(--ay,50%);margin-top:-4px;
                  transform:rotate(-45deg)}
+
+  /* ================= телефон =================
+     Кнопок и побочной информации много, а экрана нет, поэтому раскладка меняется
+     не масштабом, а составом: график занимает всё, восемь островов настроек уезжают
+     в шторку снизу, а наверху остаётся только то, без чего нельзя ни секунды —
+     пульт (пуск/шаг/сброс), время и кнопка шторки. Эти три части и есть #bar.
+     На десктопе всего этого нет вовсе. */
+  #bar,#scrim,.sh{display:none}
+
+  /* Порог телефона повторён в app.js (`MOB`) — стили и переезд пульта обязаны
+     переключаться на одном и том же месте, иначе пульт окажется в двух местах
+     сразу. Второе условие — телефон лёжа: там мало не ширины, а высоты, и боковая
+     панель в 288px оставляет графику полосу в полтора сантиметра. */
+  @media (max-width:760px), (max-height:480px) and (max-width:1000px){
+    :root{--barh:50px}
+
+    header{padding:6px 8px;gap:6px}
+    /* строка 1: список задач и «Применить» рядом, строка 2: поле, строка 3: ошибки.
+       Отдельная строка ради одной кнопки на телефоне непозволительна. */
+    #presetbox{width:auto;flex:1 1 auto;min-width:0;order:-1}
+    #presetbtn{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    .hcol{order:-1}
+    #eqbox{flex:1 0 100%;min-width:0}
+    /* кегль меньше 16px iOS считает поводом зазумить страницу на фокусе, и обратно
+       она уже не отъезжает — поэтому поле ввода на телефоне крупнее, а не мельче */
+    #eq,#eqhl{font-size:16px}
+    #eq{max-height:32vh}
+    #apply .kb{display:none}
+    #msg{flex:1 0 100%;max-width:none}      /* пусто — строка схлопывается в ноль */
+
+    #plots{padding:6px;gap:6px}
+    #pw{min-height:120px}
+    #xw{height:26%;min-height:76px}
+    #hint{font-size:10px;line-height:1.3;max-width:62%}
+    /* превью формулы на телефоне не показывается (см. markHi) — места справа от
+       списка нет; после выбора формула и так видна в поле ввода */
+
+    /* шторка настроек: та же <aside>, но выдвижная и над графиком */
+    aside{position:fixed;z-index:80;left:0;right:0;width:auto;
+          bottom:calc(var(--barh) + env(safe-area-inset-bottom,0px));
+          /* не во весь экран: ползунок параметра крутят, глядя на кривую,
+             поэтому над шторкой обязана оставаться полоса графика */
+          max-height:64vh;max-height:64dvh;padding:0 10px 14px;
+          border-left:none;border-top:1px solid var(--line);
+          border-radius:14px 14px 0 0;box-shadow:0 -14px 40px rgba(0,0,0,.55);
+          transform:translateY(calc(100% + var(--barh) + 40px));
+          transition:transform .22s ease;overscroll-behavior:contain}
+    aside.open{transform:none}
+    .sh{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:3;
+        margin:0 -10px 8px;padding:13px 12px 8px;background:var(--panel);
+        border-bottom:1px solid var(--line)}
+    .sh .grab{position:absolute;left:50%;top:5px;width:34px;height:4px;margin-left:-17px;
+              border-radius:2px;background:#2b3d57}
+    .sh b{font-weight:600;font-size:11px;letter-spacing:1.2px;
+          text-transform:uppercase;color:var(--dim)}
+    .sh button{margin-left:auto;padding:3px 11px}
+    #scrim{display:block;position:fixed;inset:0;z-index:70;background:rgba(4,7,12,.55);
+           opacity:0;pointer-events:none;transition:opacity .22s}
+    #scrim.on{opacity:1;pointer-events:auto}
+
+    /* нижняя строка */
+    #bar{display:flex;align-items:center;gap:7px;flex:none;z-index:90;
+         padding:5px 8px calc(5px + env(safe-area-inset-bottom,0px));
+         background:var(--panel);border-top:1px solid var(--line)}
+    #barctl{display:flex;flex:none}
+    #barctl>#padbtns{display:flex;gap:6px}
+    #barctl button{width:50px;height:var(--barh);padding:0;font-size:15px}
+    #barctl #play{font-size:17px}
+    #bart{flex:1;min-width:0;text-align:center;color:var(--dim);
+          font:12px/1.25 "Cascadia Mono",Consolas,monospace;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    #gear{flex:none;height:var(--barh);padding:0 14px;font-size:16px}
+
+    /* пальцем целятся хуже, чем мышью: всё, во что надо попасть, крупнее */
+    aside button{min-height:34px}
+    aside .seg button{padding:6px 0}
+    aside input[type=number]{width:88px;padding:7px 9px}
+    aside select{padding:7px 6px}
+    aside input[type=range]{height:28px}
+    #tools button{height:44px}
+    .chk{margin:9px 0}
+    .chk input{width:18px;height:18px}
+    .chip{padding:6px 11px}
+    .par .top button{padding:4px 9px}
+
+    #tip{max-width:min(280px,86vw)}
+  }
+
+  /* телефон лёжа: тесно по высоте, поэтому подсказка на графике убирается,
+     а диаграмма x–t ужимается — но не пропадает, ради неё половину задач и смотрят */
+  @media (max-height:480px) and (max-width:1000px){
+    /* лёжа ширины хватает, чтобы собрать всю шапку в одну строку: список, поле,
+       «Применить». Каждая сэкономленная строка шапки — это +35px графику */
+    #presetbox{flex:1 1 170px}
+    #eqbox{flex:2 1 230px}
+    .hcol{order:0}
+    #hint{display:none}
+    #xw{height:30%;min-height:52px}
+    #eq{max-height:22vh}
+    aside{max-height:78vh;max-height:78dvh}
+  }
 </style>
 </head>
 <body>
@@ -227,7 +331,8 @@
       <textarea id="eq" rows="1" spellcheck="false">ut + u*ux + uxxx = 0</textarea>
     </div>
     <div class="hcol">
-      <button id="apply">Применить (Ctrl+↵)</button>
+      <!-- напоминание про Ctrl+↵ прячется на телефоне: там нет ни Ctrl, ни места -->
+      <button id="apply">Применить<span class="kb"> (Ctrl+↵)</span></button>
     </div>
     <div id="msg"><span id="err"></span><span id="warn"></span></div>
   </header>
@@ -246,13 +351,18 @@
     </div>
 
     <aside>
+      <!-- шапка шторки: видна только на телефоне, где панель — выдвижная (см. .sh) -->
+      <div class="sh"><span class="grab"></span><b>Настройки</b><button id="sheetx">готово</button></div>
+
       <section class="isl">
       <h3>Управление</h3>
-      <div class="grid3">
+      <!-- #ctlhome — место пульта на десктопе; на телефоне relayout() переносит
+           сам узел #padbtns в нижнюю строку #barctl и обратно -->
+      <div id="ctlhome"><div class="grid3" id="padbtns">
         <button id="play" class="big" data-tip="Пуск / пауза|Пробел на клавиатуре делает то же самое">▶</button>
         <button id="stepb" data-tip="Один кадр|Шагов/кадр штук за раз — не дожидаясь анимации">⏭</button>
         <button id="reset" data-tip="Сброс к t=0|Вернуть начальные данные, не трогая уравнение (клавиша R)">⟲</button>
-      </div>
+      </div></div>
       <div class="row"><label>скорость</label><div id="speed" class="seg"
         data-tip="Скорость счёта|Во сколько раз быстрее идёт модельное время. Это шаги на кадр, точность от них не зависит. Кадр всё равно обрывается по времени, так что «×50» на тяжёлой сетке — это не зависание, а просто меньше кадров в секунду."></div></div>
       <div class="row"><label>шагов/кадр</label><input type="number" id="spf" value="6" min="1" max="2000" step="1"></div>
@@ -328,8 +438,17 @@
       </section>
     </aside>
   </main>
+
+  <!-- нижняя строка телефона: пульт (переезжает сюда из «Управления»), самое нужное
+       из диагностики и кнопка шторки. На десктопе всей строки нет. -->
+  <div id="bar">
+    <div id="barctl"></div>
+    <div id="bart"></div>
+    <button id="gear" data-tip="Настройки|Сетка, поля, начальные данные, параметры, диагностика — всё здесь">⚙</button>
+  </div>
 </div>
 
+<div id="scrim"></div>
 <div id="tip"></div>
 <div id="eqprev"></div>
 

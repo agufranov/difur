@@ -5,6 +5,13 @@
 const { Sim, buildSystem, parseOne, tokenize, scanFields, splitAtoms } = DifurCore;
 const $ = id => document.getElementById(id);
 
+/* телефонная раскладка. Условие обязано совпадать с @media в index.html символ
+   в символ: стили прячут боковую панель в шторку, а этот matchMedia переносит
+   пульт в нижнюю строку. Разъедутся — пульт окажется в двух местах сразу.
+   Второе условие — телефон лёжа, там мало высоты, а не ширины. */
+const MOB = '(max-width:760px), (max-height:480px) and (max-width:1000px)';
+const mob = matchMedia(MOB);
+
 /* цвет — по полю; компоненты (u, ut, utt) — тем же цветом, но пунктиром */
 const COLORS = ['#5ad1ff','#ffb454','#63d68a','#ff7ba8','#b18cff','#ffe066','#8ce8d0'];
 
@@ -443,6 +450,13 @@ function updateDiag() {
     (100*d.loss).toFixed(0) + '% энергии за единицу времени — считается уже не исходная задача, ' +
     'а её вязкая версия: возьми сетку помельче</span>';
   $('status').innerHTML = st;
+  // на телефоне вся диагностика спрятана в шторке, поэтому самое нужное — время и
+  // амплитуда выбранного поля — дублируется в нижнюю строку. Разнос важнее всего:
+  // без этого счёт молча стоял бы, а почему — видно только открыв шторку.
+  const bt = $('bart'), p = d.per[S.sel];
+  bt.textContent = S.dead ? 'решение разошлось'
+                   : 't ' + d.t.toFixed(2) + (p ? ' · max ' + f(p.max) : '');
+  bt.style.color = S.dead ? 'var(--bad)' : '';
 }
 
 /* ================= система уравнений ================= */
@@ -957,6 +971,35 @@ document.addEventListener('pointerdown', hideTip, true);
 window.addEventListener('blur', hideTip);
 document.querySelector('aside').addEventListener('scroll', hideTip);
 
+/* На тачскрине наведения нет, а в подсказках лежит половина объяснений — что делает
+   «крупный шаг», почему гашение меняет задачу. Поэтому долгое нажатие (420 мс)
+   показывает ту же подсказку. Клик после долгого нажатия давится: иначе «подержать
+   ▶, чтобы прочитать» заодно пускало бы счёт. Уход пальца больше чем на 10 px —
+   это уже прокрутка панели, подсказку отменяем. */
+let pressT = 0, pressX = 0, pressY = 0, pressShown = false;
+const endPress = () => clearTimeout(pressT);
+
+document.addEventListener('pointerdown', ev => {
+  pressShown = false;
+  if (ev.pointerType === 'mouse') return;
+  const el = ev.target.closest ? ev.target.closest('[data-tip]') : null;
+  if (!el) return;
+  pressX = ev.clientX; pressY = ev.clientY;
+  clearTimeout(pressT);
+  pressT = setTimeout(() => { pressShown = true; tipFor = el; showTip(el); }, 420);
+});
+document.addEventListener('pointermove', ev => {
+  if (ev.pointerType !== 'mouse' && Math.hypot(ev.clientX - pressX, ev.clientY - pressY) > 10)
+    endPress();
+});
+document.addEventListener('pointerup', endPress);
+document.addEventListener('pointercancel', endPress);
+document.addEventListener('click', ev => {
+  if (!pressShown) return;
+  pressShown = false;
+  ev.preventDefault(); ev.stopPropagation();     // capture: до обработчиков самой кнопки
+}, true);
+
 /* ================= кнопки начальных данных ================= */
 function buildTools() {
   const box = $('tools');
@@ -1219,7 +1262,9 @@ function markHi() {
     el.classList.toggle('hi', i === hiIdx);
     el.classList.toggle('cur', i === +sel.value);
   });
-  if (hiIdx >= 0) showPrev(hiIdx); else hidePrev();
+  // на телефоне превью не показываем: справа от списка нет места, а после выбора
+  // формула всё равно окажется в поле ввода
+  if (hiIdx >= 0 && !mob.matches) showPrev(hiIdx); else hidePrev();
 }
 
 function openList(on) {
@@ -1303,14 +1348,44 @@ function loadPreset(p) {
   draw();
 }
 
+/* ================= телефон: шторка настроек ================= */
+
+/** Пульт живёт в «Управлении» на десктопе и в нижней строке на телефоне.
+    Переезжает сам узел, а не копия: `syncPlay`, обработчики кнопок и тесты
+    работают с теми же `#play/#stepb/#reset` и про переезд ничего не знают.
+    Копия была бы вторым источником правды — пришлось бы синхронизировать
+    подсветку «идёт счёт» в двух местах. */
+function relayout() {
+  const pad = $('padbtns'), home = mob.matches ? $('barctl') : $('ctlhome');
+  if (pad.parentNode !== home) home.appendChild(pad);
+  $('hint').textContent = mob.matches
+    ? 'тяни пальцем: ↕ амплитуда, ↔ ширина'
+    : 'тяни мышью: ↕ амплитуда, ↔ ширина · колесо — ширина · Alt — добавить';
+  if (!mob.matches) openSheet(false);         // вернулись на десктоп — панель снова на месте
+}
+
+const aside = document.querySelector('aside');
+const sheetOpen = () => aside.classList.contains('open');
+function openSheet(on) {
+  aside.classList.toggle('open', on);
+  $('scrim').classList.toggle('on', on);
+  $('gear').classList.toggle('on', on);
+  hideTip();
+}
+$('gear').onclick = () => openSheet(!sheetOpen());
+$('scrim').onclick = () => openSheet(false);
+$('sheetx').onclick = () => openSheet(false);
+mob.addEventListener('change', () => { relayout(); fitCanvas(); draw(); });
+
 /* ================= старт ================= */
+relayout();
 window.addEventListener('resize', () => { fitCanvas(); autosizeEq(); draw(); });
 fitCanvas();
 loadPreset(PRESETS[0]);
 syncPlay();
 requestAnimationFrame(frame);
 
-window.__difur = { S, sim, PRESETS, loadPreset, px2x, py2u, x2px, u2py, applySystem,
+window.__difur = { S, sim, PRESETS, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
                    prettyEq, fitMath, formatEq, refreshDt, frameSteps,
                    setBudget: ms => stepBudgetMs = ms,
                    stepInfo: () => ({ done: stepsDone, sps: stepsPerSec }) };

@@ -551,6 +551,56 @@ steps.push(() => {
   ck('после пера считается', D.sim.diagnostics().finite);
 });
 
+/* --- телефонная раскладка ---
+   Прогон идёт в окне 1400x900, то есть в десктопном режиме: проверяем, что он
+   остался нетронутым, и что порог переключения записан в CSS и в JS одинаково. */
+steps.push(() => {
+  const norm = s => s.replace(/\s+/g, '');
+  let cond = null;
+  for (const sh of document.styleSheets)
+    for (const r of sh.cssRules)
+      if (r.type === CSSRule.MEDIA_RULE && /max-width:\s*760px/.test(r.conditionText)) cond = r.conditionText;
+  // порог записан дважды: @media в index.html и MOB в app.js. Разъедутся — пульт
+  // окажется в двух местах сразу (или ни в одном)
+  ck('порог телефона в CSS и в app.js совпадает', !!cond && norm(cond) === norm(D.MOB),
+     cond + '  vs  ' + D.MOB);
+
+  ck('на широком экране пульт живёт в «Управлении»', $('padbtns').parentNode.id === 'ctlhome',
+     $('padbtns').parentNode.id);
+  ck('нижняя строка телефона на десктопе скрыта', getComputedStyle($('bar')).display === 'none',
+     getComputedStyle($('bar')).display);
+  ck('панель справа — не шторка',
+     getComputedStyle(document.querySelector('aside')).position === 'static',
+     getComputedStyle(document.querySelector('aside')).position);
+  $('stepb').click();
+  ck('в нижнюю строку дублируется время', /^t \d/.test($('bart').textContent), $('bart').textContent);
+});
+
+/* долгое нажатие вместо наведения: на тачскрине это единственный способ прочитать
+   подсказку, и он не должен заодно нажимать саму кнопку */
+let smoothWas = 0;
+const press = () => {
+  smoothWas = D.S.smooth;
+  $('smooth').dispatchEvent(new PointerEvent('pointerdown',
+    { bubbles:true, pointerId:9, pointerType:'touch', clientX:10, clientY:10 }));
+};
+press.wait = 700;                       // длиннее порога долгого нажатия (420 мс)
+steps.push(press);
+
+steps.push(() => {
+  ck('долгое нажатие показывает подсказку', $('tip').classList.contains('on'), $('tip').className);
+  ck('в подсказке текст этой кнопки', /гипервязкость/.test($('tip').textContent),
+     $('tip').textContent.slice(0, 40));
+  $('smooth').dispatchEvent(new PointerEvent('pointerup',
+    { bubbles:true, pointerId:9, pointerType:'touch', clientX:10, clientY:10 }));
+  $('smooth').click();                  // браузер шлёт click и после долгого нажатия
+  ck('клик после долгого нажатия подавлен', D.S.smooth === smoothWas,
+     'было ' + smoothWas + ', стало ' + D.S.smooth);
+  $('smooth').click();
+  ck('следующий клик работает как обычно', D.S.smooth !== smoothWas, String(D.S.smooth));
+  $('smooth').click();                  // вернуть как было
+});
+
 steps.push(() => {
   ck('ошибок за весь прогон нет', window.__errs.length===0, window.__errs.join(' | '));
   const pre = document.createElement('pre'); pre.id='smoke';
@@ -564,6 +614,6 @@ let i = 0;
   if (i >= steps.length) return;
   const f = steps[i++];
   try { f(); } catch(e){ R.push('FAIL  исключение на шаге '+(i-1)+': '+e.message); }
-  setTimeout(next, 100);
+  setTimeout(next, f.wait || 100);      // шаг может попросить паузу подлиннее (f.wait)
 })();
 })();
