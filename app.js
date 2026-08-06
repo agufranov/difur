@@ -33,11 +33,16 @@ const SG = (function () {
 /* плато скорости шире горба — горб едет как твёрдое тело */
 const plateau = (x, x0, w, e) => 0.5*(Math.tanh((x-x0+w)/e) - Math.tanh((x-x0-w)/e));
 
+/* `sol:true` — «у задачи есть солитоны». Единственная фишка про поведение решений,
+   которую нельзя вычислить из текста (см. «фишки пресетов» ниже), поэтому стоит
+   руками и только там, где солитон виден с первого запуска: КдФ, мКдФ, Кавахара,
+   синус-Гордон. У Клейн–Гордона солитон тоже есть (топологический кинк), но
+   начальные данные пресета его не показывают — обещать нечего. */
 const PRESETS = [
   { name:'Кортевег–де Фриз (солитоны)', eq:'ut + u*ux + uxxx = 0', L:40, N:512, dt:0.005,
-    y:[-1,4], ic:{ u:{tool:'sech',A:3,w:2} } },
+    y:[-1,4], sol:true, ic:{ u:{tool:'sech',A:3,w:2} } },
   { name:'мКдФ', eq:'ut + 6u^2*ux + uxxx = 0', L:40, N:512, dt:0.002, y:[-0.5,2],
-    ic:{ u:{tool:'sech',A:1,w:1.5} } },
+    sol:true, ic:{ u:{tool:'sech',A:1,w:1.5} } },
   { name:'Бюргерс (ударная волна)', eq:'ut + u*ux = nu*uxx', p:{nu:0.02}, L:20, N:512, dt:0.002,
     y:[-1.5,1.5], ic:{ u:{tool:'sin',A:1,w:5} } },
   { name:'Курамото–Сивашинский (хаос)', eq:'ut + u*ux + uxx + uxxxx = 0', L:100, N:512, dt:0.05,
@@ -49,50 +54,66 @@ const PRESETS = [
   { name:'Эйри (чистая дисперсия)', eq:'ut + uxxx = 0', L:40, N:512, dt:0.005, y:[-1,1.3],
     ic:{ u:{tool:'gauss',A:1,w:1} } },
   { name:'Кавахара', eq:'ut + u*ux + uxxx - uxxxxx = 0', L:40, N:512, dt:0.002, y:[-1,3],
-    ic:{ u:{tool:'sech',A:2,w:2} } },
+    sol:true, ic:{ u:{tool:'sech',A:2,w:2} } },
   { name:'Фишер–КПП (фронт)', eq:'ut = D*uxx + r*u*(1-u)', p:{D:0.2,r:1}, L:40, N:512, dt:0.01,
     y:[-0.2,1.3], ic:{ u:{tool:'step',A:1,w:3} } },
   { name:'Аллен–Кан', eq:'ut = eps*uxx + u - u^3', p:{eps:0.1}, L:40, N:512, dt:0.005,
     y:[-1.4,1.4], ic:{ u:{tool:'noise',A:0.4,w:2} } },
 
-  { name:'▸ Волновое уравнение (utt)', eq:'utt = c^2*uxx', p:{c:1}, L:40, N:512, dt:0.01,
+  { name:'Волновое уравнение', eq:'utt = c^2*uxx', p:{c:1}, L:40, N:512, dt:0.01,
     y:[-1.2,1.2], ic:{ u:{tool:'gauss',A:1,w:1.5}, ut:{tool:'const',A:0} } },
-  { name:'▸ Клейн–Гордон (utt)', eq:'utt = uxx - m^2*u - u^3', p:{m:1}, L:40, N:512, dt:0.005,
+  { name:'Клейн–Гордон', eq:'utt = uxx - m^2*u - u^3', p:{m:1}, L:40, N:512, dt:0.005,
     y:[-1.5,1.5], ic:{ u:{tool:'gauss',A:1.2,w:2}, ut:{tool:'const',A:0} } },
-  { name:'▸ Волна с трением u–v–z', eq:'utt = -v*ut\nvt = -V*ut\nzt = -u*v*vxx*ux',
+  { name:'Волна с трением u–v–z', eq:'utt = -v*ut\nvt = -V*ut\nzt = -u*v*vxx*ux',
     p:{V:0.5}, L:20, N:256, dt:0.005, y:[-1.6,2],
     ic:{ u:{tool:'gauss',A:1,w:1.5}, ut:{tool:'const',A:-1}, v:{tool:'const',A:0.3}, z:{tool:'const',A:0} } },
-  { name:'▸ FitzHugh–Nagumo (2 поля)', eq:'ut = Du*uxx + u - u^3/3 - v\nvt = Dv*vxx + eps*(u + a - b*v)',
+  { name:'FitzHugh–Nagumo', eq:'ut = Du*uxx + u - u^3/3 - v\nvt = Dv*vxx + eps*(u + a - b*v)',
     p:{Du:1,Dv:0,eps:0.08,a:0.7,b:0.8}, L:60, N:512, dt:0.02, y:[-2.5,2.5],
     ic:{ u:{tool:'step',A:2.7,w:5,base:-1.2}, v:{tool:'const',A:-0.6} } },
-  { name:'▸ Хищник–жертва (2 поля)', eq:'ut = a*uxx + u*(1-u) - u*v\nvt = b*vxx + c*u*v - d*v',
+  { name:'Хищник–жертва', eq:'ut = a*uxx + u*(1-u) - u*v\nvt = b*vxx + c*u*v - d*v',
     p:{a:0.05,b:0.5,c:2,d:0.6}, L:60, N:512, dt:0.01, y:[-0.2,1.6],
     ic:{ u:{tool:'const',A:0.5}, v:{tool:'gauss',A:0.3,w:2} } },
 
   /* Комплексные поля: `i` делает из теплопроводности Шрёдингера. Кривая на графике —
      модуль, цвет вдоль неё — фаза, диаграмма x–t становится domain coloring.
      У свободного пакета явной части нет вовсе, поэтому экспонента точна и dt
-     ограничивает только гладкость картинки — отсюда крупные dt и fixdt. */
-  { name:'ψ Шрёдингер: расплывание пакета', eq:'ut = i*uxx', L:60, N:512, dt:0.004,
-    fixdt:true, spf:10, y:[-0.1,1.1], ic:{ u:{tool:'gauss',A:1,w:2,k0:0} } },
-  { name:'ψ Шрёдингер: пакет с импульсом', eq:'ut = i*uxx', L:60, N:512, dt:0.004,
-    fixdt:true, spf:10, y:[-0.1,1.1], k0:3, ic:{ u:{tool:'gauss',A:1,w:2,k0:3} } },
-  { name:'ψ Шрёдингер: два пакета навстречу', eq:'ut = i*uxx', L:60, N:1024, dt:0.004,
-    fixdt:true, spf:10, y:[-0.1,1.6], k0:4,
+     ограничивает только гладкость картинки — отсюда крупные dt и fixdt.
+
+     Уравнение одно на три опыта — различаются они только начальными данными,
+     поэтому это один пресет со сценариями (`sc`), а не три пресета с дословно
+     одинаковым текстом. Раньше их было три, и список приходилось делать липким,
+     чтобы заголовок не перескакивал на первый совпавший по тексту; сценарий
+     выбирается кнопкой-картинкой и в заголовок не лезет. Поля сценария
+     перекрывают поля пресета, так что общее (уравнение, L, dt, темп) написано
+     один раз. */
+  { name:'Шрёдингер (волновой пакет)', eq:'ut = i*uxx', L:60, N:512, dt:0.004,
+    fixdt:true, spf:10, y:[-0.1,1.1], sc:[
+    { name:'расплывание', icon:'spread',
+      tip:'Неподвижный гауссов пакет, k₀=0. Стоит на месте и расплывается: ширина растёт, ' +
+          'высота падает, а норма ‖ψ‖² в легенде держится — расплывание не потеря вещества.',
+      ic:{ u:{tool:'gauss',A:1,w:2,k0:0} } },
+    { name:'импульс', icon:'kick', k0:3,
+      tip:'Тот же пакет, умноженный на e^{ik₀x} при k₀=3: едет вправо со скоростью 2k₀=6 и ' +
+          'расплывается на ходу. Частота смены цвета вдоль кривой — это и есть импульс.',
+      ic:{ u:{tool:'gauss',A:1,w:2,k0:3} } },
     // встречные импульсы ±k₀: в месте встречи получается интерференционная гребёнка,
     // и на диаграмме x–t она видна как решётка, а не как «горбы прошли друг сквозь друга»
-    ic:{ u:{ fnRe:x => Math.exp(-Math.pow((x+15)/3,2))*Math.cos(4*x)
-                     + Math.exp(-Math.pow((x-15)/3,2))*Math.cos(-4*x),
-             fnIm:x => Math.exp(-Math.pow((x+15)/3,2))*Math.sin(4*x)
-                     + Math.exp(-Math.pow((x-15)/3,2))*Math.sin(-4*x) } } },
+    { name:'встреча', icon:'pair', k0:4, N:1024, y:[-0.1,1.6],
+      tip:'Два пакета с импульсами ±4 идут навстречу. В месте встречи — интерференционная ' +
+          'гребёнка (на диаграмме x–t она видна решёткой), после встречи оба уходят невредимыми.',
+      ic:{ u:{ fnRe:x => Math.exp(-Math.pow((x+15)/3,2))*Math.cos(4*x)
+                       + Math.exp(-Math.pow((x-15)/3,2))*Math.cos(-4*x),
+               fnIm:x => Math.exp(-Math.pow((x+15)/3,2))*Math.sin(4*x)
+                       + Math.exp(-Math.pow((x-15)/3,2))*Math.sin(-4*x) } } }
+    ] },
 
-  { name:'★ Опрокидывание горба (Бюргерс без вязкости)', eq:'ut + u*ux = 0', L:20, N:512,
+  { name:'Опрокидывание горба (Бюргерс без вязкости)', story:true, eq:'ut + u*ux = 0', L:20, N:512,
     dt:0.002, y:[-0.3,1.2], smooth:true,
     ic:{ u:{tool:'gauss',A:1,w:2} } },
-  { name:'★ Упругий отскок солитонов (синус-Гордон)', eq:'utt = uxx - sin(u)', L:100, N:1024,
+  { name:'Упругий отскок солитонов (синус-Гордон)', story:true, sol:true, eq:'utt = uxx - sin(u)', L:100, N:1024,
     dt:0.01, fixdt:true, spf:10, y:[-0.3,1.8], sel:'ut', vis:{ u:false, ut:true },
     ic:{ u:{fn:SG.u}, ut:{fn:SG.ut} } },
-  { name:'★ Перенос горба со своей скоростью', eq:'ut = -v*ux\nvt = -v*vx + nu*vxx',
+  { name:'Перенос горба со своей скоростью', story:true, eq:'ut = -v*ux\nvt = -v*vx + nu*vxx',
     p:{nu:0.05}, L:60, N:512, dt:0.003, y:[-0.5,1.3],
     ic:{ u:{fn:x => Math.exp(-Math.pow((x+12)/2,2)) + Math.exp(-Math.pow((x-12)/2,2))},
          v:{fn:x => 0.3*plateau(x,-12,5,1.5) - 0.3*plateau(x,12,5,1.5)} } }
@@ -142,6 +163,286 @@ function toolIcon(id) {
          '<path class="sh" d="' + d + '"/>' + nib + '</svg>';
 }
 
+/* ================= фишки пресетов ================= */
+
+/* Чем эта задача отличается от соседней по списку — значком у правого края пункта.
+   Раньше на этом месте были значки-приставки в самом названии (`▸`, `ψ`, `★`):
+   они делили список на группы, но нигде не объявляли, на какие, и `▸` вдобавок
+   совпадал со стрелкой «разверни» у свёрнутых секций. Теперь у каждого значка
+   есть имя и объяснение, и оно раскрывается в превью формулы.
+
+   **Фишка вычисляется из уравнения, а не приписывается руками** — иначе она
+   разъедется с текстом при первой же правке пресета. Руками задаются только те
+   четыре, которых в тексте нет и быть не может: сценарии, включённое гашение,
+   «опыт» (подобранные начальные данные) и солитоны. Последние — свойство решений,
+   а не текста: Бюргерс и Курамото–Сивашинский тоже нелинейны, но солитонов у них
+   нет, и никакой разбор уравнения этого не покажет. */
+const sq = v => v*v;
+const sech2 = s => { const c = Math.cosh(s); return 1/(c*c); };
+
+/** путь по параметрической кривой pt(s) ∈ [-1,1]² в коробке 14×14 */
+function spark(pt, n) {
+  let d = '';
+  for (let i = 0; i < n; i++) {
+    const [px, py] = pt(-1 + 2*i/(n-1));
+    d += (i ? 'L' : 'M') + (7 + px*6).toFixed(1) + ' ' + (7 - py*5.2).toFixed(1);
+  }
+  return d;
+}
+
+const CHIP_ART = {
+  // фигурная скобка и две строки — ровно то, чем система набрана в превью формулы.
+  // Раньше тут были две волны (два поля на графике), но волна у соседней фишки
+  // значит «решение», и два разных смысла у одного штриха не разошлись
+  sys:  '<path d="M6.6 2c-1.5 0-1.6.5-1.6 1.9 0 1.5-.3 2.3-1.4 3.1 1.1.8 1.4 1.6 1.4 3.1 ' +
+        '0 1.4.1 1.9 1.6 1.9"/><path d="M8.5 4.4h4.2"/><path d="M8.5 9.6h3"/>',
+  // так это и пишется в поле ввода, и так же верстается в превью: u с индексом tt.
+  // До этого здесь побывали `ü` (дуга с двумя точками читалась грустным смайликом)
+  // и маятник — маятник рисовал пример, а не саму вторую производную
+  utt:  '<text x="7" y="9.6" text-anchor="middle">u<tspan class="sb" dy="1.6">tt</tspan></text>',
+  // фазор: длина и угол — это |ψ| и фаза, ровно то, что рисует цветная кривая
+  cx:   '<circle cx="7" cy="7" r="5.2"/><path d="M7 7 10.7 3.3"/>',
+  // укрученный горб: вершина едет быстрее подошвы — так выглядит нелинейность
+  nl:   '<path d="' + spark(s => { const t = s*1.5, g = Math.exp(-sq(t/0.6));
+                                   return [(t + 0.7*g)/1.75, 1.5*g - 0.62]; }, 46) + '"/>',
+  // два солитона на общей подошве: высокий узкий догоняет низкий широкий — высота
+  // и есть скорость, и в этом вся суть (после столкновения оба выйдут целыми)
+  sol:  '<path d="' + spark(s => [s, 1.3*(sech2((s+0.55)/0.19) + 0.5*sech2((s-0.35)/0.33)) - 0.6],
+                            90) + '"/>',
+  /* Пятёрка по символу нарисована одним языком: пунктир — «было», сплошное —
+     «стало». У сноса тот же горб уехал вправо, у сглаживания — расплылся, сохранив
+     площадь (пунктирный узкий и сплошной широкий — одной массы). */
+  // горбы нарочно налезают друг на друга: два раздельных читались бы как «солитоны»,
+  // а тут нужен один горб с призраком там, где он только что был
+  adv:  '<path class="dsh" d="' + spark(s => [s, sech2((s + 0.18)/0.3) - 0.5], 56) + '"/>' +
+        '<path d="' + spark(s => [s, sech2((s - 0.18)/0.3) - 0.5], 56) + '"/>',
+  dif:  '<path class="dsh" d="' + spark(s => [s, 1.55*Math.exp(-sq(s/0.19)) - 0.75], 64) + '"/>' +
+        '<path d="' + spark(s => [s, 0.5*Math.exp(-sq(s/0.59)) - 0.75], 64) + '"/>',
+  // чирп: одна кривая, а длина волны вдоль неё меняется — это и есть «каждая
+  // гармоника со своей скоростью». Амплитуда постоянна: дисперсия ничего не гасит
+  dsp:  '<path d="' + spark(s => [s, 0.72*Math.sin(6.6*s - 2.6*sq(s) + 1.2)], 96) + '"/>',
+  // зеркало гашения: рябь не умирает, а растёт слева направо
+  amp:  '<path d="' + spark(s => [s, 0.14*Math.exp(0.9*(s + 1))*Math.sin(5.2*s + 0.4)], 90) + '"/>',
+  // волна упирается в неподвижные рельсы: амплитуда не уходит ни вверх, ни вниз
+  cons: '<path class="dsh" d="M1 3.8h12"/><path class="dsh" d="M1 10.2h12"/>' +
+        '<path d="' + spark(s => [s, 0.62*Math.sin(6.2*s + 1.55)], 88) + '"/>',
+  // ряд кнопок — то самое, чем сценарий и выбирается
+  sc:   '<rect x="1" y="4" width="3.5" height="6" rx="1.2"/>' +
+        '<rect x="5.2" y="4" width="3.5" height="6" rx="1.2"/>' +
+        '<rect x="9.4" y="4" width="3.5" height="6" rx="1.2"/>',
+  // затухающая рябь — то, что делает кнопка «∿ гасить осцилляции»
+  smt:  '<path d="' + spark(s => [s, Math.exp(-1.7*(s+1))*Math.sin(5.6*s+1.1)], 60) + '"/>',
+  // звезда осталась от прежней приставки `★` — она и означала «поставленный опыт»
+  st:   '<path class="fl" d="M7 1.3 8.65 5.35 13 5.68 9.65 8.5 10.7 12.7 7 10.4 3.3 12.7 ' +
+        '4.35 8.5 1 5.68 5.35 5.35z"/>'
+};
+
+const chipIcon = id => '<svg class="chip" viewBox="0 0 14 14" aria-hidden="true">' +
+                       CHIP_ART[id] + '</svg>';
+
+/* нелинейность по дереву: поле под функцией, в степени или в произведении с полем.
+   Явной части (`hasExplicit`) для этого мало — явным бывает и линейный член,
+   скажем потенциал V(x)·u */
+const hasFld = n => !!n && (n.k === 'd' || hasFld(n.a) || hasFld(n.b));
+const isNonlin = n => !!n && (
+  (n.k === 'mul' && hasFld(n.a) && hasFld(n.b)) ||
+  (n.k === 'div' && hasFld(n.b)) ||
+  ((n.k === 'pow' || n.k === 'fn') && hasFld(n.a)) ||
+  isNonlin(n.a) || isNonlin(n.b));
+
+/* ================= символ линейной части: откуда берутся пять фишек ниже =========
+
+   S(k) = Σ c·(ik)ⁿ — тот самый символ, который решатель кладёт в экспоненту.
+   Одна и та же величина отвечает сразу на четыре вопроса: Re S — растёт мода или
+   гаснет, Im S/k — с какой скоростью бежит. Поэтому «снос», «дисперсия»,
+   «сглаживание», «раскачка» и «без потерь» не выдуманы по виду текста
+   («есть чётная производная без компенсации» и прочие приметы), а посчитаны. */
+
+/** значение символа списка линейных членов при данном k */
+function symAt(lin, k) {
+  // i^n ходит по кругу 1, i, -1, -i: вклад члена — его коэффициент, повёрнутый
+  // на n прямых углов и умноженный на kⁿ
+  let re = 0, im = 0;
+  for (const l of lin) {
+    const p = Math.pow(k, l.n), q = l.n & 3;
+    re += p*(q === 0 ? l.c.re : q === 1 ? -l.c.im : q === 2 ? -l.c.re : l.c.im);
+    im += p*(q === 0 ? l.c.im : q === 1 ?  l.c.re : q === 2 ? -l.c.im : -l.c.re);
+  }
+  return { re, im };
+}
+
+/** корень из комплексного числа — нужен ровно для `utt` */
+const csqrt = z => {
+  const r = Math.hypot(z.re, z.im);
+  return { re: Math.sqrt(Math.max(0, (r + z.re)/2)),
+           im: (z.im < 0 ? -1 : 1)*Math.sqrt(Math.max(0, (r - z.re)/2)) };
+};
+
+/* λ(k) поля f — показатели роста, по одному на порядок поля по времени.
+   У первого порядка это сам диагональный символ. У второго вся линейная часть
+   сидит не в диагонали, а в связи с нижней компонентой (`uxx` у `utt = uxx` —
+   это cross-член из ut в u), и λ ищется из λ² = A₁λ + A₀: без этого волновое и
+   Клейн–Гордон остались бы вовсе без разбора.
+   Связи между РАЗНЫМИ полями в λ не входят — диагонализовать матрицу M×M ради
+   значка не тот размен. Из-за этого фишка может чего-то не заметить; чтобы она
+   при этом не наврала, «снос» и «без потерь» (единственные, кто говорит про всё
+   решение, а не про наличие механизма) требуют `pure` — см. ниже. */
+function lambdasOf(m, f, k) {
+  const ord = m.order[f], top = m.comps[m.index[f + ':' + (ord-1)]];
+  const A = []; for (let d = 0; d < ord; d++) A[d] = { re:0, im:0 };
+  const add = (d, s) => { A[d].re += s.re; A[d].im += s.im; };
+  add(ord - 1, symAt(top.linear, k));
+  for (const x of m.cross)
+    if (x.row === top.ci && m.comps[x.col].f === f)
+      add(m.comps[x.col].d, symAt([{ c:x.c, n:x.n }], k));
+  if (ord === 1) return [A[0]];
+  const d = csqrt({ re: A[1].re*A[1].re - A[1].im*A[1].im + 4*A[0].re,
+                    im: 2*A[1].re*A[1].im + 4*A[0].im });
+  return [{ re:(A[1].re + d.re)/2, im:(A[1].im + d.im)/2 },
+          { re:(A[1].re - d.re)/2, im:(A[1].im - d.im)/2 }];
+}
+
+/* Таблица λ по ветвям. k берутся ровно те, что есть в сетке пресета (2π/L … πN/L):
+   полоса роста, которая в сетку не влезла, ничего и не раскачает — фишка обещает
+   то, что человек увидит на этой сетке, а не то, что верно в пределе. */
+function spectrum(m, p) {
+  if (!p.L || !p.N) return null;                          // сетки нет — не о чем говорить
+  if (m.fields.some(f => m.order[f] > 2)) return null;    // третий порядок не разбираем
+  const dk = 2*Math.PI/p.L, K = [];
+  for (let j = 1; j <= p.N/2; j++) K.push(j*dk);          // k=0 пропущен: скорость Im λ/k
+  const br = [];
+  for (const f of m.fields) {
+    const b = []; for (let r = 0; r < m.order[f]; r++) b.push({ re:[], im:[] });
+    for (const k of K) {
+      const l = lambdasOf(m, f, k);
+      for (let r = 0; r < b.length; r++) { b[r].re.push(l[r].re); b[r].im.push(l[r].im); }
+    }
+    for (const x of b) br.push(x);
+  }
+  let sc = 0;                                             // масштаб: |λ| бывает и ~k⁴
+  for (const b of br) for (let j = 0; j < K.length; j++)
+    sc = Math.max(sc, Math.hypot(b.re[j], b.im[j]));
+  /* `pure`: линейная часть — это и есть всё уравнение. Нелинейный член ломает
+     любое обещание про форму решения, а линейная связь между разными полями
+     (`ut = v`, `vt = u` растёт, хотя диагонали пусты) — про рост. */
+  const pure = m.comps.every(c => c.explicit.every(it => !isNonlin(it.node))) &&
+               m.cross.every(x => m.comps[x.col].f === m.comps[x.row].f);
+  return { K, br, pure, tol: 1e-9*(sc || 1) };
+}
+
+const lastOf = a => a[a.length - 1];
+const speeds = (S, b) => b.im.map((v, j) => v/S.K[j]);      // фазовая скорость моды
+/* «все гармоники бегут с одной скоростью» — Im λ строго пропорционален k */
+const flat = (S, b) => {
+  const s = speeds(S, b), mx = Math.max(...s), mn = Math.min(...s);
+  return mx - mn <= 1e-9*(1 + Math.max(Math.abs(mx), Math.abs(mn)));
+};
+const anyBr = (S, f) => !!S && S.br.some(b => f(b, S));
+
+/* `why` пустое у «системы»: что полей несколько, видно по самой формуле —
+   раскрывать это в превью, где формула стоит строкой выше, незачем */
+const CHIPS = [
+  { id:'sys', name:'система', of: m => m.fields.length > 1 },
+  { id:'utt', name:'вторая производная по времени', of: m => m.comps.some(c => c.d > 0),
+    why:'порядок понижается сам: появляются компоненты u и ut, у каждой свои начальные ' +
+        'данные — задать можно не только форму, но и начальную скорость.' },
+  { id:'cx',  name:'комплексное поле', of: m => m.complex,
+    why:'решение комплексное: на графике рисуется |ψ|, а цвет вдоль кривой — фаза, ' +
+        'диаграмма x–t становится цветной. Появляется поле «импульс k₀».' },
+  { id:'nl',  name:'нелинейное', of: m => m.comps.some(c => c.explicit.some(it => isNonlin(it.node))),
+    why:'есть член, где поле умножается само на себя (или стоит под функцией). Из него ' +
+        'и берутся опрокидывание, хаос и солитоны — линейная задача так не умеет.' },
+  /* Пятёрка по символу S(k). Порядок — от «ничего не меняется» к «растёт само»:
+     снос → дисперсия → сглаживание → раскачка, и отдельно «без потерь». */
+  { id:'adv', name:'снос', of: (m, p, S) => !!S && S.pure && S.br.every(b => flat(S, b)) &&
+      anyBr(S, b => Math.abs(b.im[0]/S.K[0]) > S.tol),
+    why:'все гармоники бегут с одной скоростью, и линейной частью дело исчерпано: ' +
+        'профиль едет целиком, не меняя формы.' },
+  { id:'dsp', name:'дисперсия', of: (m, p, S) => anyBr(S, (b, s) => !flat(s, b)),
+    why:'длинные и короткие волны бегут с разной скоростью, поэтому одиночный горб ' +
+        'расползается в гребёнку хвостов. Высота падает, но это перестройка, а не потеря.' },
+  { id:'dif', name:'сглаживание', of: (m, p, S) =>
+      anyBr(S, (b, s) => lastOf(b.re) < -s.tol && lastOf(b.re) < b.re[0] - s.tol),
+    why:'чем мельче рябь, тем быстрее она гаснет: углы и разрывы разглаживаются сами. ' +
+        'Мелкая сетка тут не спасает — она добавляет мод, которые сразу же и умирают.' },
+  { id:'amp', name:'раскачка', of: (m, p, S) => anyBr(S, (b, s) => b.re.some(v => v > s.tol)),
+    why:'часть гармоник растёт сама: ноль неустойчив, и любая мелочь — шум в начальных ' +
+        'данных, ошибка округления — поднимается, пока её не остановит нелинейность.' },
+  { id:'cons', name:'без потерь', of: (m, p, S) => !!S && S.pure &&
+      S.br.every(b => b.re.every(v => Math.abs(v) <= S.tol)),
+    why:'ни одна гармоника не растёт и не затухает — меняются только фазы. Показания ' +
+        'в легенде обязаны стоять на месте: если поехали, виноват шаг по времени.' },
+  { id:'sol', name:'солитоны', of: (m, p) => !!p.sol,
+    why:'у этой нелинейной задачи есть горбы, которые не расплываются: дисперсия растаскивает ' +
+        'горб ровно настолько, насколько нелинейность его подтягивает. Высокий солитон уже и ' +
+        'быстрее низкого, а после столкновения оба выходят целыми — только со сдвигом.' },
+  { id:'sc',  name:'сценарии', of: (m, p) => !!p.sc,
+    why:'уравнение одно, а постановок несколько: они различаются начальными данными и ' +
+        'выбираются кнопками «сценарий» в острове «Начальные данные».' },
+  { id:'smt', name:'гашение включено', of: (m, p) => !!p.smooth,
+    why:'решение за конечное время становится разрывным, и ряд Фурье отвечает на разрыв ' +
+        'пилой. Пресет включает «∿ гасить осцилляции» — выключи кнопку и сравни.' },
+  { id:'st',  name:'поставленный опыт', of: (m, p) => !!p.story,
+    why:'не просто уравнение: начальные данные подобраны так, чтобы эффект был виден ' +
+        'с первого запуска. Рисовать поверх можно, но опыт от этого кончится.' }
+];
+
+/** фишки пресета: считаются один раз при загрузке — уравнения пресетов не меняются */
+function chipsOf(p) {
+  let m = null;
+  try { m = buildSystem(p.eq, Object.assign({}, p.p || {})); } catch (e) { return []; }
+  const S = spectrum(m, p);            // считается один раз на пресет, а не на фишку
+  return CHIPS.filter(c => c.of(m, p, S));
+}
+const FX = PRESETS.map(chipsOf);
+
+const chipRow = i => '<span class="fx">' + FX[i].map(c => chipIcon(c.id)).join('') + '</span>';
+
+/* ================= картинки сценариев ================= */
+
+/* Иконка сценария — это его начальные данные: Re ψ(x, 0) по той же формуле, что
+   уйдёт в поле. У неподвижного пакета это просто горб, у едущего — горб с
+   заполнением, и частота заполнения и есть k₀ (ровно то, что видно цветом на
+   графике). Одной кривой мало там, где вся суть в том, что будет дальше:
+   у «расплывания» пунктиром пририсовано, каким горб станет, а у едущих пакетов —
+   стрелка направления. Подписи словами («расплывание», «встреча») этого не
+   показывают: две из трёх картинок иначе выглядели бы одинаково. */
+const SCEN_ART = {
+  spread: { f:  s => Math.exp(-sq(s/0.26)),
+            gh: s => 0.42*Math.exp(-sq(s/0.68)) },              // «станет таким»
+  kick:   { f:  s => Math.exp(-sq((s+0.15)/0.42))*Math.cos(9*s), ar:[[0.6, 1]] },
+  // стрелки стоят под своими пакетами, а не в середине: сведённые к центру они
+  // сливались наконечниками в бантик
+  pair:   { f:  s => Math.exp(-sq((s+0.5)/0.2))*Math.cos(17*s)
+                   + Math.exp(-sq((s-0.5)/0.2))*Math.cos(17*s), ar:[[-0.45, 1], [0.45, -1]] }
+};
+
+function scenIcon(id) {
+  const W = 62, H = 30, TOP = 3, BOT = 21, n = 120;   // ниже BOT — полоса под стрелки
+  const a = SCEN_ART[id];
+  const at = i => -1 + 2*i/(n-1);
+  let lo = 0, hi = 0;
+  for (let i = 0; i < n; i++)
+    for (const f of [a.f, a.gh]) if (f) { const y = f(at(i)); lo = Math.min(lo,y); hi = Math.max(hi,y); }
+  const Xn = s => 2 + (s+1)/2*(W-4);
+  const X = s => Xn(s).toFixed(1);
+  const Y = u => (BOT - (u-lo)/(hi-lo || 1)*(BOT-TOP)).toFixed(1);
+  const path = f => {
+    let d = '';
+    for (let i = 0; i < n; i++) d += (i ? 'L' : 'M') + X(at(i)) + ' ' + Y(f(at(i)));
+    return d;
+  };
+  let g = lo < 0 ? '<line class="zero" x1="1" y1="'+Y(0)+'" x2="'+(W-1)+'" y2="'+Y(0)+'"/>' : '';
+  if (a.gh) g += '<path class="gh" d="' + path(a.gh) + '"/>';
+  g += '<path class="sh" d="' + path(a.f) + '"/>';
+  for (const [pos, dir] of a.ar || []) {
+    const x = Xn(pos), y = H - 4, t = (x + 5*dir).toFixed(1), h = (x + 1.6*dir).toFixed(1);
+    g += '<path class="ar" d="M' + (x - 5*dir).toFixed(1) + ' ' + y + 'H' + t +
+         'M' + h + ' ' + (y-2.4) + 'L' + t + ' ' + y + 'L' + h + ' ' + (y+2.4) + '"/>';
+  }
+  return '<svg viewBox="0 0 '+W+' '+H+'" aria-hidden="true">' + g + '</svg>';
+}
+
 /* Иконки пульта и «применить» — рисованные, а не юникодные глифы. Глифы взяли не
    из того шрифта: ⏭ система считает эмодзи и рисует цветной картинкой с подложкой,
    ⟲ приходит из запасного шрифта и выходит вдвое мельче соседей. У svg такой
@@ -178,6 +479,7 @@ const S = {
   running:false, spf:6, baseSpf:6, autodt:true, coarse:false,
   autoY:true, yMin:-1, yMax:4, showIC:true,
   sel:0, vis:[], ic:[], icI:[], base:null, drag:null, dead:false,
+  scen:-1,                             // выбранный сценарий пресета (-1 — сценариев нет)
   k0:0,                                // импульс: фаза e^{ik₀x} у комплексного поля
   wasRunning:false,                    // счёт до нажатия мыши — вернуть после отпускания
   smooth:false,                        // гашение осцилляций опрокидывания
@@ -810,21 +1112,21 @@ function normEq(s) {
   return s.split(/[\n;]+/).map(l => l.trim()).filter(l => l && l[0] !== '#')
           .join('\n').replace(/[ \t]+/g, '');
 }
-/** Один и тот же текст может стоять у нескольких пресетов: три задачи Шрёдингера
- *  различаются не уравнением, а начальными данными (импульс, два пакета). Поэтому
- *  выбранный пресет липкий: пока его текст совпадает, список остаётся на нём, и
- *  только иначе берётся первый подходящий. Без этого загрузка «двух пакетов»
- *  тут же переписывала бы заголовок на «расплывание пакета». */
+/** Текст уравнения у пресетов уникален, поэтому хватает первого совпадения.
+ *  (Было не так: три задачи Шрёдингера различались только начальными данными,
+ *  и выбранный пресет приходилось делать липким, чтобы заголовок не перескакивал
+ *  на первый совпавший. Теперь такие задачи — сценарии одного пресета.) */
 function matchPreset(text) {
-  const n = normEq(text), cur = +$('preset').value;
-  if (cur >= 0 && PRESETS[cur] && normEq(PRESETS[cur].eq) === n) return cur;
+  const n = normEq(text);
   for (let i = 0; i < PRESETS.length; i++) if (normEq(PRESETS[i].eq) === n) return i;
   return -1;
 }
 function syncEqUI() {
   const text = $('eq').value;
-  $('preset').value = String(matchPreset(text));      // -1 — пункт «своё уравнение»
+  const i = matchPreset(text);
+  $('preset').value = String(i);                      // -1 — пункт «своё уравнение»
   syncPresetBtn();
+  buildScen(i);                                       // ушли с пресета — ушли и сценарии
   $('apply').disabled = text === S.appliedEq;
 }
 
@@ -1210,6 +1512,39 @@ document.addEventListener('click', ev => {
   ev.preventDefault(); ev.stopPropagation();     // capture: до обработчиков самой кнопки
 }, true);
 
+/* ================= кнопки сценариев ================= */
+
+/** Сценарии есть у пресета, где уравнение одно, а поставленных опытов несколько
+ *  (Шрёдингер). Строка появляется только у такого пресета: у остальных сценарий
+ *  ровно один — сам пресет, и пустой ряд кнопок был бы враньём.
+ *
+ *  Кнопки перестраиваются только при смене пресета, а не на каждое нажатие
+ *  клавиши: `syncEqUI` зовётся на любой ввод в поле, а рисовать три svg на
+ *  каждую букву незачем. */
+let scenOf = -2;                       // для какого пресета сейчас построены кнопки
+function buildScen(idx) {
+  const p = idx >= 0 ? PRESETS[idx] : null, box = $('scen');
+  $('scenbox').style.display = p && p.sc ? '' : 'none';
+  if (!p || !p.sc) { scenOf = -1; return; }
+  if (scenOf !== idx) {
+    scenOf = idx;
+    box.innerHTML = '';
+    p.sc.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.dataset.sc = i;
+      b.setAttribute('data-tip', s.name + '|' + s.tip);
+      b.innerHTML = scenIcon(s.icon) + '<span>' + s.name + '</span>';
+      box.appendChild(b);
+    });
+  }
+  [...box.children].forEach((b, i) => b.classList.toggle('on', i === S.scen));
+}
+$('scen').addEventListener('click', e => {
+  const b = e.target.closest('button[data-sc]'); if (!b) return;
+  const i = +$('preset').value; if (i < 0) return;
+  loadPreset(PRESETS[i], +b.dataset.sc);
+});
+
 /* ================= кнопки начальных данных ================= */
 function buildTools() {
   const box = $('tools');
@@ -1467,7 +1802,9 @@ function syncPresetBtn() {
 
 PRESETS.forEach((p, i) => {
   const d = document.createElement('div');
-  d.className = 'pitem'; d.dataset.i = i; d.textContent = p.name;
+  d.className = 'pitem'; d.dataset.i = i;
+  d.innerHTML = '<span class="nm"></span>' + chipRow(i);
+  d.querySelector('.nm').textContent = p.name;   // имя — текстом, значки — рядом справа
   plist.appendChild(d);
 });
 
@@ -1475,16 +1812,40 @@ PRESETS.forEach((p, i) => {
     На телефоне справа места нет, поэтому превью ложится внизу экрана во всю
     ширину и получает кнопку «выбрать»: тап по пункту показывает формулу, а не
     применяет её сразу — иначе вёрстку формулы на телефоне никто бы не увидел. */
+/** Расшифровка значков под формулой: значок сам по себе — ребус, а место, где на
+    него смотрят, ровно одно — превью. «Система» не раскрывается: что уравнений
+    несколько, видно по самой формуле строкой выше. */
+function chipWhy(i) {
+  const rows = FX[i].filter(c => c.why);
+  if (!rows.length) return '';
+  return '<div class="fxwhy">' + rows.map(c =>
+    '<div>' + chipIcon(c.id) + '<span><b>' + c.name + '</b> — ' + c.why + '</span></div>').join('') +
+    '</div>';
+}
+
+const PREV_GAP = 8;                    // зазор между низом списка и верхом превью
+
 function showPrev(i) {
   const el = itemAt(i); if (!el) return;
   const phone = mob.matches;
-  eqprev.innerHTML = prettyEq(PRESETS[i].eq) +
+  /* Заголовок — имя пресета: в списке и на кнопке длинное имя обрезается
+     многоточием («Опрокидывание горба (Бюргерс без…»), и целиком его негде
+     прочитать. В превью оно переносится и видно полностью. */
+  eqprev.innerHTML = '<div class="ttl">' + escHTML(PRESETS[i].name) + '</div>' +
+    prettyEq(PRESETS[i].eq) + chipWhy(i) +
     (phone ? '<button class="pick" data-i="' + i + '">выбрать</button>' : '');
   fitMath(eqprev);                     // скобки рисуются по уже измеренной высоте
   eqprev.classList.toggle('phone', phone);
   eqprev.classList.add('on');
   if (phone) {                         // место и размер задаёт CSS, инлайн — снять
     eqprev.style.left = ''; eqprev.style.top = '';
+    /* Превью лежит внизу экрана, список раскрывается сверху — и они налезали друг
+       на друга: у длинной формулы с расшифровкой фишек превью съедало нижние
+       пункты. Высота превью зависит от пресета, поэтому потолок списка считается
+       по факту, от измеренного верхнего края превью, а не задаётся в CSS числом. */
+    const top = eqprev.getBoundingClientRect().top;
+    plist.style.maxHeight = Math.max(90, top - PREV_GAP - plist.getBoundingClientRect().top) + 'px';
+    el.scrollIntoView({ block:'nearest' });   // список ужался — пункт под пальцем не прятать
     return;
   }
   const lr = plist.getBoundingClientRect(), ir = el.getBoundingClientRect();
@@ -1494,7 +1855,10 @@ function showPrev(i) {
                        : Math.max(8, lr.left - w - 10)) + 'px';
   eqprev.style.top = clamp(ir.top - 10, 8, Math.max(8, innerHeight - h - 8)) + 'px';
 }
-const hidePrev = () => eqprev.classList.remove('on');
+function hidePrev() {
+  eqprev.classList.remove('on');
+  plist.style.maxHeight = '';          // потолок был подогнан под превью — вернуть в CSS
+}
 
 function markHi() {
   [...plist.children].forEach((el, i) => {
@@ -1530,8 +1894,11 @@ plist.addEventListener('click', e => {
   const it = e.target.closest('.pitem');
   if (!it) return;
   const i = +it.dataset.i;
-  // телефон: первый тап показывает формулу, второй по тому же пункту — применяет
-  if (mob.matches && hiIdx !== i) { hiIdx = i; markHi(); return; }
+  /* Телефон: тап по пункту только показывает формулу, применяет её одна кнопка —
+     «выбрать» в превью. Раньше повторный тап по тому же пункту тоже применял, и
+     список закрывался под пальцем у того, кто просто листал задачи и вернулся
+     к уже открытой: выбор происходил там, где его не просили. */
+  if (mob.matches) { hiIdx = i; markHi(); return; }
   choose(i);
 });
 eqprev.addEventListener('click', e => {
@@ -1560,41 +1927,47 @@ pbtn.addEventListener('keydown', e => {
   }
 });
 
-function loadPreset(p) {
+/** Грузит пресет; `si` — номер сценария у пресетов со списком `sc`. Сценарий
+ *  накладывается поверх пресета (`ic`, `N`, `y`, `k0` — его), поэтому дальше
+ *  везде читается `cfg`, а не `p`: общее написано в пресете один раз. */
+function loadPreset(p, si) {
   S.running = false; syncPlay();
   const idx = PRESETS.indexOf(p); if (idx >= 0) { sel.value = idx; syncPresetBtn(); }
-  $('N').value = p.N; $('L').value = p.L;
-  sim.resize(p.N, p.L);
-  $('eq').value = p.eq;
+  S.scen = p.sc ? clamp(si | 0, 0, p.sc.length - 1) : -1;
+  const cfg = p.sc ? Object.assign({}, p, p.sc[S.scen]) : p;
+  $('N').value = cfg.N; $('L').value = cfg.L;
+  sim.resize(cfg.N, cfg.L);
+  $('eq').value = cfg.eq;
   autosizeEq();
   S.sel = 0; S.ic = []; S.icI = []; S.vis = [];
-  S.k0 = p.k0 || 0; $('k0').value = S.k0;
-  if (!applySystem(p.eq, Object.assign({}, p.p || {}))) return;
+  S.k0 = cfg.k0 || 0; $('k0').value = S.k0;
+  if (!applySystem(cfg.eq, Object.assign({}, cfg.p || {}))) return;
   S.autodt = true; $('autodt').checked = true;
-  S.yMin = p.y[0]; S.yMax = p.y[1];
+  S.yMin = cfg.y[0]; S.yMax = cfg.y[1];
   $('ymin').value = S.yMin; $('ymax').value = S.yMax;
   for (const comp of sim.model.comps) {
-    const d = p.ic[comp.name];
+    const d = cfg.ic[comp.name];
     const q = d ? makeIC(Object.assign({ x0:0, edge:S.edge }, d), comp.complex)
                 : { re:new Float64Array(sim.N), im:null };
     setIC(comp.ci, q.re, q.im);
   }
-  const first = p.ic[sim.model.comps[0].name];
+  const first = cfg.ic[sim.model.comps[0].name];
   if (first && first.tool) {
     S.tool = first.tool === 'noise' ? 'sech' : first.tool;
     S.width = first.w || S.width; $('wid').value = S.width;
     [...$('tools').children].forEach(x => x.classList.toggle('on', x.dataset.tool === S.tool));
   }
-  if (p.vis) for (const c of sim.model.comps) if (c.name in p.vis) S.vis[c.ci] = p.vis[c.name];
-  if (p.sel) { const c = sim.model.comps.find(q => q.name === p.sel); if (c) S.sel = c.ci; }
+  if (cfg.vis) for (const c of sim.model.comps) if (c.name in cfg.vis) S.vis[c.ci] = cfg.vis[c.name];
+  if (cfg.sel) { const c = sim.model.comps.find(q => q.name === cfg.sel); if (c) S.sel = c.ci; }
   // темп пресета — это и есть «×1»: скорость всегда сбрасывается вместе с задачей
-  S.baseSpf = p.spf || 6; S.spf = S.baseSpf; $('spf').value = S.spf; syncSpeed();
-  setSmooth(!!p.smooth);
+  S.baseSpf = cfg.spf || 6; S.spf = S.baseSpf; $('spf').value = S.spf; syncSpeed();
+  setSmooth(!!cfg.smooth);
   buildLegend(sim.model);
+  buildScen(idx);                      // подсветить выбранный сценарий
   sim.t = 0; clearXT();
   // у некоторых задач автоподбор dt (он рассчитан на адвекцию u·ux) слишком осторожен
-  S.autodt = !p.fixdt; $('autodt').checked = S.autodt;
-  sim.setDt(p.dt); $('dt').value = p.dt;
+  S.autodt = !cfg.fixdt; $('autodt').checked = S.autodt;
+  sim.setDt(cfg.dt); $('dt').value = cfg.dt;
   draw();
 }
 
@@ -1638,7 +2011,7 @@ loadPreset(PRESETS[0]);
 syncPlay();
 requestAnimationFrame(frame);
 
-window.__difur = { S, sim, PRESETS, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
+window.__difur = { S, sim, PRESETS, FX, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
                    prettyEq, fitMath, formatEq, refreshDt, frameSteps,
                    setBudget: ms => stepBudgetMs = ms,
                    stepInfo: () => ({ done: stepsDone, sps: stepsPerSec }) };

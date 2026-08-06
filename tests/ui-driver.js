@@ -253,6 +253,20 @@ steps.push(() => {
   ck('производные — нижними индексами', /<b[^>]*>u<sub>xxx<\/sub><\/b>/.test(prev.innerHTML),
      prev.textContent);
   ck('умножение — точкой', prev.textContent.indexOf('·') >= 0, prev.textContent);
+  /* Имя в списке обрезается многоточием, поэтому целиком его показывает заголовок
+     превью — и показывает первым, до формулы */
+  const iLong = D.PRESETS.reduce((b, p, j) => p.name.length > D.PRESETS[b].name.length ? j : b, 0);
+  hover(iLong);
+  const ttl = prev.querySelector('.ttl');
+  ck('заголовок превью — полное имя пресета',
+     !!ttl && ttl.textContent === D.PRESETS[iLong].name, ttl ? ttl.textContent : 'нет заголовка');
+  ck('заголовок стоит над формулой',
+     !!ttl && !!(ttl.compareDocumentPosition(prev.querySelector('.peq')) &
+                 Node.DOCUMENT_POSITION_FOLLOWING));
+  ck('длинное имя не обрезано в заголовке',
+     ttl.scrollWidth <= ttl.clientWidth + 1,
+     ttl.scrollWidth + ' vs ' + ttl.clientWidth);
+  hover(iKdV);
   const r = prev.getBoundingClientRect(), lr = list.getBoundingClientRect();
   ck('превью справа от списка', r.left >= lr.right, 'x=' + r.left.toFixed(0) + ' список до ' + lr.right.toFixed(0));
 
@@ -287,6 +301,67 @@ steps.push(() => {
     hover(iGreek);
     ck('греческие буквы подставлены', /ν|ε/.test(prev.textContent), prev.textContent);
   }
+  /* --- фишки: значки у правого края пункта и их расшифровка в превью --- */
+  const ids = i => D.FX[i].map(c => c.id).join(',');
+  const at = re => D.PRESETS.findIndex(p => re.test(p.name));
+  // фишки считаются из самого уравнения — приписать их руками нельзя
+  ck('у Шрёдингера — комплексное поле, дисперсия, без потерь и сценарии',
+     ids(at(/Шрёдингер/)) === 'cx,dsp,cons,sc', ids(at(/Шрёдингер/)));
+  ck('у хищника–жертвы — система, нелинейность и сглаживание',
+     ids(at(/Хищник/)) === 'sys,nl,dif', ids(at(/Хищник/)));
+  ck('у синус-Гордона ещё солитоны и «опыт»', ids(at(/отскок/)) === 'utt,nl,sol,st', ids(at(/отскок/)));
+  // солитоны приписаны руками: из текста их не вывести, и нелинейности для них мало —
+  // Бюргерс и Курамото–Сивашинский нелинейны, а солитонов у них нет
+  ck('у КдФ — нелинейность, дисперсия и солитоны', ids(at(/Кортевег/)) === 'nl,dsp,sol',
+     ids(at(/Кортевег/)));
+  ck('у Бюргерса солитонов нет', ids(at(/Бюргерс \(/)) === 'nl,dif', ids(at(/Бюргерс \(/)));
+  ck('у Курамото–Сивашинского солитонов нет', ids(at(/Курамото/)) === 'nl,dif,amp',
+     ids(at(/Курамото/)));
+
+  /* --- фишки по символу S(k): читаются из линейной части, а не из примет текста --- */
+  // теплопроводность: единственный механизм — сглаживание, и он же единственная фишка
+  ck('теплопроводность только сглаживает', ids(at(/Теплопроводность/)) === 'dif',
+     ids(at(/Теплопроводность/)));
+  // перенос: Im S ∝ k, Re S = 0 — форма не меняется вовсе
+  ck('перенос — снос без потерь', ids(at(/^Перенос$/)) === 'adv,cons', ids(at(/^Перенос$/)));
+  // у волнового вся линейная часть сидит в связи ut→u, и λ = ±ik берётся из квадратного
+  ck('у волнового снос виден через utt', ids(at(/Волновое/)) === 'utt,adv,cons', ids(at(/Волновое/)));
+  // тот же квадратный корень у Клейн–Гордона даёт λ = ±i√(k²+m²) — уже с дисперсией
+  ck('у Клейн–Гордона дисперсия из-за массы', ids(at(/Клейн/)) === 'utt,nl,dsp', ids(at(/Клейн/)));
+  // Эйри: дисперсия без единой потери — расплывание не есть затухание
+  ck('Эйри расплывается, ничего не теряя', ids(at(/Эйри/)) === 'dsp,cons', ids(at(/Эйри/)));
+  // Курамото и Аллен–Кан — единственные, где Re S(k) > 0 на сетке пресета
+  ck('раскачка только там, где Re S > 0',
+     D.PRESETS.map((p, i) => D.FX[i].some(c => c.id === 'amp') ? p.name : null)
+       .filter(Boolean).length === 3,
+     D.PRESETS.map((p, i) => D.FX[i].some(c => c.id === 'amp') ? p.name : '').filter(Boolean).join(' | '));
+  // нелинейность отменяет обещания про форму решения: у синус-Гордона λ = ±ik, как у
+  // волнового, но sin(u) может и раскачать, и погасить — «снос» и «без потерь» молчат
+  ck('нелинейность снимает «снос» и «без потерь»',
+     !/adv|cons/.test(ids(at(/отскок/))) && !/adv|cons/.test(ids(at(/Кортевег/))),
+     ids(at(/отскок/)) + ' / ' + ids(at(/Кортевег/)));
+  const bad = D.PRESETS.map((p, i) =>
+      list.children[i].querySelectorAll('svg.chip').length === D.FX[i].length ? null : p.name)
+    .filter(Boolean);
+  ck('в каждом пункте значков столько же, сколько фишек', bad.length === 0, bad.join(' | '));
+
+  hover(at(/Хищник/));
+  ck('превью раскрывает нелинейность словами', /нелинейное/.test(prev.textContent), prev.textContent);
+  // «систему» не раскрываем: что уравнений несколько, видно по самой формуле выше
+  ck('«система» в превью не раскрывается', prev.textContent.indexOf('система') < 0, prev.textContent);
+  hover(at(/Шрёдингер/));
+  ck('превью раскрывает комплексное поле и сценарии',
+     /комплексное поле/.test(prev.textContent) && /сценарии/.test(prev.textContent), prev.textContent);
+  ck('значок в расшифровке тот же, что в пункте',
+     prev.querySelectorAll('.fxwhy svg.chip').length === 4,
+     prev.querySelectorAll('.fxwhy svg.chip').length);
+  /* Пресетов без единой расшифровки не осталось: фишки по символу закрыли и
+     теплопроводность, и перенос — те два, что раньше стояли в списке немыми. */
+  hover(at(/Теплопроводность/));
+  ck('у теплопроводности ровно одна расшифровка',
+     prev.querySelectorAll('.fxwhy>div').length === 1 && /сглаживание/.test(prev.textContent),
+     prev.querySelectorAll('.fxwhy>div').length + ' ' + prev.textContent);
+
   list.dispatchEvent(new PointerEvent('pointerleave', { bubbles:true, pointerId:1 }));
   ck('уход мыши прячет превью', !prev.classList.contains('on'));
   btn.click();                       // закрыть список
@@ -502,20 +577,22 @@ steps.push(() => {
      $('bart').textContent.replace(/\s+/g,' ').slice(-46));
 });
 
-/* --- все пресеты --- */
+/* --- все пресеты и все сценарии --- */
 steps.push(() => {
   const bad = [];
-  D.PRESETS.forEach(p => {
+  // сценарии проверяются наравне с пресетами: у пресета со сценариями свои
+  // начальные данные несёт каждый из них, а не сам пресет
+  D.PRESETS.forEach(p => (p.sc ? p.sc.map((s,i) => [s.name, i]) : [[p.name, 0]]).forEach(([nm, si]) => {
     try {
-      D.loadPreset(p);
+      D.loadPreset(p, si);
       for (let i=0;i<30;i++) D.sim.step();
-      if (!D.sim.diagnostics().finite) bad.push(p.name+': разошёлся');
-      if ($('err').textContent) bad.push(p.name+': '+$('err').textContent);
+      if (!D.sim.diagnostics().finite) bad.push(nm+': разошёлся');
+      if ($('err').textContent) bad.push(nm+': '+$('err').textContent);
       const live = D.S.ic.filter(a => a && a.some(v => v!==0)).length;
-      if (!live) bad.push(p.name+': пустые начальные данные');
-    } catch(e){ bad.push(p.name+': '+e.message); }
-  });
-  ck('все пресеты грузятся и считаются', bad.length===0, bad.join(' | '));
+      if (!live) bad.push(nm+': пустые начальные данные');
+    } catch(e){ bad.push(nm+': '+e.message); }
+  }));
+  ck('все пресеты и сценарии грузятся и считаются', bad.length===0, bad.join(' | '));
 });
 
 /* --- скорость счёта --- */
@@ -643,15 +720,24 @@ steps.push(() => {
 
 /* --- комплексное поле: Шрёдингер --- */
 steps.push(() => {
-  const p = D.PRESETS.filter(q => /навстречу/.test(q.name))[0];
-  D.loadPreset(p);
+  const p = D.PRESETS.filter(q => q.sc)[0];
+  const iMeet = p.sc.findIndex(s => /встреча/.test(s.name));
+  D.loadPreset(p, iMeet);
   ck('пресет Шрёдингера загрузился', /i\*uxx/.test($('eq').value) && $('err').textContent === '',
      $('eq').value + ' | ' + $('err').textContent);
   ck('поле стало комплексным', D.sim.isComplex(0) && D.sim.model.complex);
-  // список пресетов липкий: у трёх задач Шрёдингера один и тот же текст уравнения,
-  // и без этого заголовок перескакивал бы на первую из них
-  ck('в списке остался выбранный пресет', /навстречу/.test($('presetbtn').textContent),
+  ck('в списке стоит сам пресет', /Шрёдингер/.test($('presetbtn').textContent),
      $('presetbtn').textContent);
+  // сценарий перекрывает поля пресета: у «встречи» своя сетка и свой масштаб
+  ck('сценарий перекрыл N пресета', D.sim.N === 1024 && D.sim.N !== p.N,
+     'N='+D.sim.N+' у пресета '+p.N);
+  const sbtn = [...$('scen').children];
+  ck('кнопки сценариев построены и подсвечен нужный',
+     sbtn.length === p.sc.length && sbtn[iMeet].classList.contains('on') &&
+     getComputedStyle($('scenbox')).display !== 'none',
+     'кнопок='+sbtn.length+' выбран='+sbtn.findIndex(b => b.classList.contains('on')));
+  ck('у каждого сценария своя картинка',
+     new Set(sbtn.map(b => b.querySelector('svg').innerHTML)).size === p.sc.length);
   ck('«импульс k₀» появился', getComputedStyle($('k0row')).display !== 'none');
   ck('в легенде колечко фазы', !!$('legend').querySelector('.dot.ph'));
   ck('в легенде норма, а не ∫', /‖u‖²/.test($('legend').textContent), $('legend').textContent);
@@ -681,8 +767,12 @@ steps.push(() => {
 });
 
 steps.push(() => {
-  // импульс: тот же нарисованный профиль с k₀ обязан поехать, а без него — стоять
-  D.loadPreset(D.PRESETS.filter(q => /расплывание/.test(q.name))[0]);
+  // импульс: тот же нарисованный профиль с k₀ обязан поехать, а без него — стоять.
+  // Сценарий выбирается кнопкой — заодно проверяется, что кнопка и правда грузит
+  const p = D.PRESETS.filter(q => q.sc)[0];
+  $('scen').children[p.sc.findIndex(s => /расплывание/.test(s.name))].click();
+  ck('кнопка сценария загрузила «расплывание»', D.S.scen === 0 && D.S.k0 === 0 && D.sim.N === 512,
+     'scen='+D.S.scen+' k0='+D.S.k0+' N='+D.sim.N);
   const centre = () => { const u=D.sim.getU(0), w=D.sim.getUi(0);
     let n=0,m=0; for(let j=0;j<D.sim.N;j++){ const p=u[j]*u[j]+w[j]*w[j]; n+=p; m+=p*D.sim.x[j]; }
     return m/n; };
@@ -711,6 +801,9 @@ steps.push(() => {
   setEq('ut + u*ux + uxxx = 0');
   ck('после возврата к вещественной задаче k₀ скрыт',
      getComputedStyle($('k0row')).display === 'none' && !D.sim.isComplex(0));
+  // ушли с пресета — ушли и его сценарии: у КдФ сценарий один, сам пресет
+  ck('у пресета без сценариев строки сценариев нет',
+     getComputedStyle($('scenbox')).display === 'none');
 });
 
 /* --- телефонная раскладка ---
