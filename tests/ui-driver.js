@@ -793,9 +793,23 @@ steps.push(() => {
 });
 
 steps.push(() => {
-  // контракт ядра виден в интерфейсе: ошибка внятная и подсвечена на месте
-  $('eq').value = 'ut = i*uxx + i*abs(u)^2*u'; $('eq').dispatchEvent(new Event('input'));
-  ck('нелинейность с i отвергается внятно', /Мнимая единица/.test($('err').textContent),
+  // нелинейность с i — обычная задача, а не отказ: НУШ обязан приниматься,
+  // считаться и держать норму. Раньше на этом месте проверялся текст запрета.
+  setEq('i*ut + uxx + 2*abs(u)^2*u = 0');
+  ck('НУШ принят интерфейсом', !$('err').textContent && D.sim.isComplex(0),
+     $('err').textContent.slice(0,44));
+  D.S.sel = 0; D.S.k0 = 0;
+  $('tools').querySelector('[data-tool="sech"]').click();
+  drag(0.5, 1);
+  const n0 = D.sim.diagnostics().per[0].norm;
+  for (let i=0;i<60;i++) $('stepb').click();
+  const d = D.sim.diagnostics();
+  ck('НУШ считается и норма держится', d.finite && Math.abs(d.per[0].norm/n0 - 1) < 1e-6,
+     'откл='+Math.abs(d.per[0].norm/n0-1).toExponential(2));
+
+  // ошибка с позицией всё ещё живёт — на том, что осталось запрещено
+  $('eq').value = 'ut = i*uxx + u^i'; $('eq').dispatchEvent(new Event('input'));
+  ck('комплексный показатель отвергается внятно', /Комплексный показатель/.test($('err').textContent),
      $('err').textContent.slice(0,44));
   ck('виноватый кусок подсвечен', !!$('eqhl').querySelector('.mk'));
   setEq('ut + u*ux + uxxx = 0');

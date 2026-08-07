@@ -397,22 +397,30 @@ const linf = (s, c, f) => { let e=0; const u=s.getU(c); for (let j=0;j<s.N;j++) 
       Math.abs(q.mean - 2*k0*s.t) < 1e-10, q.mean.toFixed(6)+' против точных '+(2*k0*s.t).toFixed(6));
 })();
 
-/* ---------- мнимая единица: контракт и её отсутствие там, где не надо ---------- */
+/* ---------- мнимая единица: типизация выражений ----------
+   «Комплексен ли символ» и «комплексно ли поле» — разные вопросы, и ошибиться
+   тут легко в обе стороны. Лишняя комплексность стоит памяти и портит картинку,
+   потерянная — тихо портит решение, поэтому проверяется весь набор случаев. */
 (function(){
-  chk('i² = -1 ровно, поле остаётся вещественным',
-      !new Sim().setSystem('ut = i*i*uxx', {}).comps[0].complex);
-  chk('вещественная задача комплексной не становится',
-      !new Sim().setSystem('ut + u*ux + uxxx = 0', {}).complex);
-  // `i` вне диагональной линейной части обязана отвергаться внятно и с позицией,
-  // а не приходить необъяснимой ошибкой из кодогенерации
-  for (const [eq, what] of [['ut = i*uxx + i*abs(u)^2*u','нелинейность'],
-                            ['ut = i*uxx + i*sin(x)*u','потенциал от x'],
-                            ['utt = i*uxx','вторая производная по времени']]) {
-    let e = null; try { new Sim().setSystem(eq, {}); } catch (err) { e = err; }
-    chk('отвергается: ' + what,
-        e && /Мнимая единица пока работает/.test(e.message) && e.pos !== undefined,
-        e ? 'pos='+e.pos+' '+e.message.slice(0,32) : 'посчиталось молча');
+  const kind = eq => buildSystem(eq, {}).comps.map(c => c.name+':'+(c.complex?'C':'R')).join(' ');
+  const cases = [
+    ['ut = i*i*uxx',                       'u:R', 'i² = -1 ровно — это теплопроводность'],
+    ['ut + u*ux + uxxx = 0',               'u:R', 'вещественная задача комплексной не становится'],
+    ['i*ut + uxx + 2*abs(u)^2*u = 0',      'u:C', 'НУШ: i слева от ut'],
+    ['utt = i*uxx',                        'u:C ut:C', 'комплексность идёт по цепочке понижения порядка'],
+    ['ut = i*uxx\nvt = abs(u) - v',        'u:C v:R', 'abs останавливает распространение'],
+    ['ut = i*uxx\nvt = u*v',               'u:C v:C', 'произведение с комплексным полем заражает'],
+    ['ut = i*uxx\nvt = re(u) + im(u) - v', 'u:C v:R', 're и im тоже вещественны']
+  ];
+  for (const [eq, want, what] of cases) {
+    let got = null; try { got = kind(eq); } catch (e) { got = 'ошибка: '+e.message; }
+    chk('типизация: ' + what, got === want, got + (got===want?'':' вместо '+want));
   }
+  // комплексный показатель — единственное, что осталось запрещено, и запрет внятен
+  let e = null; try { buildSystem('ut = i*uxx + u^i', {}); } catch (q) { e = q; }
+  chk('комплексный показатель отвергается с позицией',
+      e && /Комплексный показатель/.test(e.message) && e.pos !== undefined,
+      e ? 'pos='+e.pos : 'посчиталось молча');
   // i*ut = -uxx — то же уравнение, записанное как пишут физики
   const a = new Sim(); a.resize(256,20); a.setSystem('i*ut = -uxx', {}); a.setDt(0.001);
   const b = new Sim(); b.resize(256,20); b.setSystem('ut = i*uxx', {}); b.setDt(0.001);
@@ -421,6 +429,101 @@ const linf = (s, c, f) => { let e=0; const u=s.getU(c); for (let j=0;j<s.N;j++) 
   let d=0; for(let j=0;j<256;j++) d=Math.max(d, Math.abs(a.getU(0)[j]-b.getU(0)[j]),
                                                 Math.abs(a.getUi(0)[j]-b.getUi(0)[j]));
   chk('«i*ut = -uxx» — то же, что «ut = i*uxx»', d<1e-14, 'расхождение='+d.toExponential(2));
+})();
+
+/* ---------- комплексная явная часть: сверка с точными решениями ----------
+   Нелинейность, потенциал от x и conj считаются кодогенерацией парами re/im.
+   Проверять их сверкой с тем же FFT было бы кругом, поэтому взяты три задачи,
+   у которых ответ выписывается вручную. Первые две вообще не содержат
+   производных по x: экспонента линейной части там единица, и ошибка целиком
+   принадлежит новому коду. */
+(function(){
+  const put = (s, f, g) => { const N=s.N, a=new Float64Array(N), b=new Float64Array(N);
+    for(let j=0;j<N;j++){ a[j]=f(s.x[j]); b[j]=g?g(s.x[j]):0; } s.setU(0,a,b); };
+  const err = (s, f, g) => { let e=0; const u=s.getU(0), w=s.getUi(0);
+    for(let j=0;j<s.N;j++) e=Math.max(e, Math.hypot(u[j]-f(s.x[j]), w[j]-g(s.x[j]))); return e; };
+
+  // ut = i·|u|²·u: модуль в каждой точке свой и не меняется, крутится только фаза
+  const g1 = x => Math.exp(-x*x/4);
+  const s1 = mk('ut = i*abs(u)^2*u', {}, 512, 40, 0.002); put(s1, g1); s1.advance(1000);
+  chk('нелинейность с i: точная фазовая накрутка e^{i|ψ|²t}',
+      err(s1, x=>g1(x)*Math.cos(g1(x)*g1(x)*s1.t), x=>g1(x)*Math.sin(g1(x)*g1(x)*s1.t)) < 1e-10,
+      err(s1, x=>g1(x)*Math.cos(g1(x)*g1(x)*s1.t), x=>g1(x)*Math.sin(g1(x)*g1(x)*s1.t)).toExponential(2));
+
+  // ut = i·x²·u: потенциал от координаты
+  const g2 = x => Math.exp(-x*x/2);
+  const s2 = mk('ut = i*x^2*u', {}, 1024, 20, 0.0005); put(s2, g2); s2.advance(400);
+  chk('потенциал от x: точное e^{i x² t}',
+      err(s2, x=>g2(x)*Math.cos(x*x*s2.t), x=>g2(x)*Math.sin(x*x*s2.t)) < 1e-9,
+      err(s2, x=>g2(x)*Math.cos(x*x*s2.t), x=>g2(x)*Math.sin(x*x*s2.t)).toExponential(2));
+
+  // ut = i·conj(u) перемешивает части крест-накрест: a' = b, b' = a
+  const g3 = x => Math.exp(-x*x);
+  const s3 = mk('ut = i*conj(u)', {}, 256, 20, 0.001); put(s3, g3); s3.advance(1000);
+  chk('conj: части растут как cosh t и sinh t',
+      err(s3, x=>g3(x)*Math.cosh(s3.t), x=>g3(x)*Math.sinh(s3.t)) < 1e-10,
+      err(s3, x=>g3(x)*Math.cosh(s3.t), x=>g3(x)*Math.sinh(s3.t)).toExponential(2));
+
+  // abs — это модуль, а не |Re|: у поля с равными частями |u| = √2·Re u
+  const s4 = mk('ut = i*uxx\nvt = abs(u) - v', {}, 256, 20, 0.001);
+  const a4 = new Float64Array(256); for(let j=0;j<256;j++) a4[j]=Math.exp(-s4.x[j]*s4.x[j]);
+  s4.setU(0, a4, a4); s4.setU(1, new Float64Array(256)); s4.step();
+  let mx4=0; for(let j=0;j<256;j++) mx4=Math.max(mx4, s4.getU(1)[j]);
+  chk('abs(u) — модуль комплексного поля, а не |Re u|',
+      Math.abs(mx4/(s4.dt*Math.SQRT2) - 1) < 1e-3, 'отн='+(mx4/(s4.dt*Math.SQRT2)).toFixed(5));
+})();
+
+/* ---------- НУШ: солитон, норма, ловушка ---------- */
+(function(){
+  // Светлый солитон sech(x)·e^{it} — точное решение i·ut + uxx + 2|u|²u = 0.
+  // Модуль обязан стоять на месте, а фаза — крутиться ровно как t.
+  const s = mk('i*ut + uxx + 2*abs(u)^2*u = 0', {}, 512, 40, 0.001);
+  const a = new Float64Array(512);
+  for (let j=0;j<512;j++) a[j] = 1/Math.cosh(s.x[j]);
+  s.setU(0, a);
+  const n0 = s.diagnostics().per[0].norm;
+  s.advance(2000);
+  let e=0; const u=s.getU(0), w=s.getUi(0);
+  for (let j=0;j<512;j++) e = Math.max(e, Math.hypot(u[j]-Math.cos(s.t)/Math.cosh(s.x[j]),
+                                                     w[j]-Math.sin(s.t)/Math.cosh(s.x[j])));
+  chk('солитон НУШ держит форму и фазу e^{it} (эталон 6e-9)', e < 1e-7, 'откл='+e.toExponential(2));
+  const dn = Math.abs(s.diagnostics().per[0].norm/n0 - 1);
+  chk('норма ∫|ψ|² у НУШ сохраняется (эталон 7e-14)', dn < 1e-11, 'дрейф='+dn.toExponential(2));
+
+  // Ловушка i·ut + uxx − x²u = 0: центр когерентного состояния ходит как x0·cos 2t
+  // и пакет при этом не расплывается — проверка потенциала на задаче с ответом.
+  const T = mk('i*ut + uxx - x^2*u = 0', {}, 512, 20, 0.0005);
+  const b = new Float64Array(512);
+  for (let j=0;j<512;j++) b[j] = Math.exp(-(T.x[j]-3)*(T.x[j]-3)/2);
+  T.setU(0, b);
+  const ctr = () => { const p=T.getU(0), q=T.getUi(0); let n=0,m=0;
+    for(let j=0;j<512;j++){ const w=p[j]*p[j]+q[j]*q[j]; n+=w; m+=w*T.x[j]; } return m/n; };
+  T.advance(3142);                                    // t ≈ π/2 — полпериода, центр в −3
+  chk('ловушка: центр ходит как x0·cos 2t',
+      Math.abs(ctr() - 3*Math.cos(2*T.t)) < 2e-3,
+      ctr().toFixed(5)+' против точных '+(3*Math.cos(2*T.t)).toFixed(5));
+})();
+
+/* ---------- Манаков: система из двух комплексных полей ---------- */
+(function(){
+  const eq = 'i*ut + uxx + 2*(abs(u)^2+abs(v)^2)*u = 0\n' +
+             'i*vt + vxx + 2*(abs(u)^2+abs(v)^2)*v = 0';
+  const s = mk(eq, {}, 512, 40, 0.001);
+  const N = 512, ar=new Float64Array(N), ai=new Float64Array(N), br=new Float64Array(N), bi=new Float64Array(N);
+  for (let j=0;j<N;j++) {
+    const x = s.x[j];
+    ar[j] = 1/Math.cosh(x+6);
+    const g = 0.8/Math.cosh(0.8*(x-6));
+    br[j] = g*Math.cos(2*x); bi[j] = g*Math.sin(2*x);
+  }
+  s.setU(0, ar, ai); s.setU(1, br, bi);
+  const d0 = s.diagnostics(), n0 = d0.per[0].norm + d0.per[1].norm;
+  chk('Манаков: комплексны обе компоненты', d0.per[0].complex && d0.per[1].complex);
+  s.advance(3000);
+  const d = s.diagnostics();
+  chk('Манаков: суммарная норма сохраняется при столкновении',
+      d.finite && Math.abs((d.per[0].norm + d.per[1].norm)/n0 - 1) < 1e-9,
+      'откл='+Math.abs((d.per[0].norm + d.per[1].norm)/n0 - 1).toExponential(2));
 })();
 
 /* ---------- смена сетки ---------- */
