@@ -62,7 +62,7 @@ Guidance for Claude Code (claude.ai/code). Это оглавление: здес
 ## Тесты
 
 ```powershell
-powershell -File tests\run.ps1     # ядро + интерфейс + телефон, ~41 с, 336 строк PASS
+powershell -File tests\run.ps1     # ядро + интерфейс + телефон, ~41 с, 338 строк PASS
 ```
 
 **Node на этой машине есть** — v24.18.1 через fnm, но в свежей оболочке его нет в

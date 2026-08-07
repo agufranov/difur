@@ -210,3 +210,8 @@ job `deploy` (осталась `queued`, через пять минут прог
 GitHub, ключи и адреса remote остаются прежними. Отпечатки ключей `ssh.github.com`
 сверены с опубликованными GitHub перед тем, как попасть в `known_hosts`.
 Проверка канала — `ssh -T git@github.com`, ответ «Hi agufranov!».
+
+**`Select-String` в PowerShell регистронезависим.** `... | Select-String 'FAIL'`
+ловит заодно `LoadEnclaveImageW failed` — три штуки за прогон, по одной на окно
+Edge, и получается «3 упавших теста» на полностью зелёном наборе. Считать надо
+`Select-String 'FAIL ' -CaseSensitive` или смотреть глазами.
