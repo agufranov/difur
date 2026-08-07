@@ -304,6 +304,13 @@ steps.push(() => {
   /* --- фишки: значки у правого края пункта и их расшифровка в превью --- */
   const ids = i => D.FX[i].map(c => c.id).join(',');
   const at = re => D.PRESETS.findIndex(p => re.test(p.name));
+  const cxPreset = D.FX.findIndex(cs => cs.some(c => c.id === 'cx'));
+  const cxWheel = list.children[cxPreset].querySelector('svg.chip .phase-wheel');
+  ck('комплексная фишка залита цветом фазы по углу',
+     !!cxWheel && cxWheel.children.length === 24 &&
+       /hsl\(0 /.test(cxWheel.children[0].getAttribute('style')) &&
+       /hsl\(180 /.test(cxWheel.children[12].getAttribute('style')),
+     cxWheel ? cxWheel.children.length : 'нет колеса');
   // фишки считаются из самого уравнения — приписать их руками нельзя
   ck('у Шрёдингера — комплексное поле, дисперсия, без потерь и сценарии',
      ids(at(/Шрёдингер/)) === 'cx,dsp,cons,sc', ids(at(/Шрёдингер/)));
