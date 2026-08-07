@@ -67,6 +67,15 @@
          max-height:min(62vh,440px);overflow-y:auto;padding:4px;background:var(--isl);
          border:1px solid #2b3d57;border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
   #plist.on{display:block}
+  /* Строка фишек под кнопкой: значки крупнее списочных — по ним целятся мышью
+     (и пальцем на телефоне), чтобы прочитать подсказку. Пустая строка убирается
+     целиком: у «Переноса» фишек две, а у своего кривого уравнения ни одной, и
+     висящий пустой отступ поднимал бы шапку зря. */
+  #fxbar{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;color:var(--dim)}
+  #fxbar:empty{display:none}
+  .fxc{display:block;padding:3px;border-radius:5px;cursor:help}
+  .fxc:hover{background:#12384a;color:var(--accent)}
+  .fxc svg.chip{width:16px;height:16px}
   #plist::-webkit-scrollbar{width:8px}
   #plist::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
   /* имя слева, значки-фишки прижаты к правому краю; ужимается при нехватке
@@ -415,6 +424,10 @@
        Значки на телефоне крупнее, но за счёт самого значка, а не отступов */
     .pitem svg.chip{width:17px;height:17px}
     .fx{gap:7px}
+    /* по фишке под кнопкой на телефоне не наводят, а держат палец (долгое нажатие
+       показывает подсказку) — попасть надо пальцем, отсюда крупнее */
+    .fxc{padding:5px}
+    .fxc svg.chip{width:19px;height:19px}
 
     /* превью формулы: справа от списка места нет, поэтому внизу во всю ширину,
        с кнопкой выбора. pointer-events нужны — по нему теперь нажимают */
@@ -439,6 +452,9 @@
     #presetbox{width:auto;flex:1 1 170px}
     #eqbox{flex:2 1 230px}
     #hint{display:none}
+    /* лёжа дорога каждая строка шапки: фишки убираются, расшифровка остаётся
+       в превью формулы */
+    #fxbar{display:none}
     #xw{height:30%;min-height:52px}
     #eq{max-height:22vh}
     aside{max-height:78vh;max-height:78dvh}
@@ -455,6 +471,9 @@
       <button id="presetbtn" aria-haspopup="listbox"
         data-tip="Готовые уравнения|Выбор подставит уравнение, сетку и начальные данные. Наведи на пункт — справа покажется формула"></button>
       <div id="plist" role="listbox"></div>
+      <!-- полный набор фишек текущей системы: в пункте списка их только пять
+           (см. chipRow), а тут все, и у каждой подсказка. Заполняет syncFx() -->
+      <div id="fxbar"></div>
       <select id="preset" hidden></select>
     </div>
     <div id="eqbox">

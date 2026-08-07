@@ -41,7 +41,7 @@ const plateau = (x, x0, w, e) => 0.5*(Math.tanh((x-x0+w)/e) - Math.tanh((x-x0-w)
 const PRESETS = [
   { name:'Кортевег–де Фриз (солитоны)', eq:'ut + u*ux + uxxx = 0', L:40, N:512, dt:0.005,
     y:[-1,4], sol:true, ic:{ u:{tool:'sech',A:3,w:2} } },
-  { name:'мКдФ', eq:'ut + 6u^2*ux + uxxx = 0', L:40, N:512, dt:0.002, y:[-0.5,2],
+  { name:'Модифицированный Кортевег–де Фриз (мКдФ)', eq:'ut + 6u^2*ux + uxxx = 0', L:40, N:512, dt:0.002, y:[-0.5,2],
     sol:true, ic:{ u:{tool:'sech',A:1,w:1.5} } },
   { name:'Бюргерс (ударная волна)', eq:'ut + u*ux = nu*uxx', p:{nu:0.02}, L:20, N:512, dt:0.002,
     y:[-1.5,1.5], ic:{ u:{tool:'sin',A:1,w:5} } },
@@ -64,7 +64,7 @@ const PRESETS = [
     y:[-1.2,1.2], ic:{ u:{tool:'gauss',A:1,w:1.5}, ut:{tool:'const',A:0} } },
   { name:'Клейн–Гордон', eq:'utt = uxx - m^2*u - u^3', p:{m:1}, L:40, N:512, dt:0.005,
     y:[-1.5,1.5], ic:{ u:{tool:'gauss',A:1.2,w:2}, ut:{tool:'const',A:0} } },
-  { name:'Волна с трением u–v–z', eq:'utt = -v*ut\nvt = -V*ut\nzt = -u*v*vxx*ux',
+  { name:'Волна с трением (система u–v–z)', eq:'utt = -v*ut\nvt = -V*ut\nzt = -u*v*vxx*ux',
     p:{V:0.5}, L:20, N:256, dt:0.005, y:[-1.6,2],
     ic:{ u:{tool:'gauss',A:1,w:1.5}, ut:{tool:'const',A:-1}, v:{tool:'const',A:0.3}, z:{tool:'const',A:0} } },
   { name:'FitzHugh–Nagumo', eq:'ut = Du*uxx + u - u^3/3 - v\nvt = Dv*vxx + eps*(u + a - b*v)',
@@ -113,7 +113,7 @@ const PRESETS = [
      держит форму, пропускает встречный солитон насквозь, поднимает рябь на
      ровном фоне. Уравнение записано так, как его пишут физики (`i` слева от
      `ut`): деление на `i` ядро умеет, а узнаваемость записи важнее. */
-  { name:'Нелинейное Шрёдингера (солитоны)', eq:'i*ut + uxx + 2*abs(u)^2*u = 0',
+  { name:'Нелинейный Шрёдингер (солитоны)', eq:'i*ut + uxx + 2*abs(u)^2*u = 0',
     L:40, N:512, dt:0.002, spf:10, sol:true, y:[-0.1,1.3], sc:[
     { name:'солитон', icon:'keep',
       tip:'ψ = sech(x)·e^{it} — точное решение. Модуль стоит на месте: дисперсия растаскивает ' +
@@ -142,29 +142,29 @@ const PRESETS = [
      нарисовано, а то, что параболическая яма делает с любым пакетом. `dt` закреплён:
      автоподбор не видит жёсткости явного потенциала (x² на краю сетки — это λ=100),
      и на подобранном им шаге «Δ за шаг» уходит в жёлтое. */
-  { name:'Ловушка (Гросс–Питаевский)', eq:'i*ut + uxx - x^2*u - g*abs(u)^2*u = 0',
+  { name:'Гросс–Питаевский (ловушка)', eq:'i*ut + uxx - x^2*u - g*abs(u)^2*u = 0',
     p:{g:2}, L:20, N:512, dt:0.002, fixdt:true, spf:10, story:true, y:[-0.1,1.2],
     ic:{ u:{fn:x => Math.exp(-(x-3)*(x-3)/2), k0:0} } },
 
-  { name:'Туннелирование сквозь барьер', eq:'i*ut + uxx - V*exp(-x^2/w^2)*u = 0',
+  { name:'Шрёдингер с барьером (туннелирование)', eq:'i*ut + uxx - V*exp(-x^2/w^2)*u = 0',
     p:{V:9,w:1}, L:60, N:1024, dt:0.002, fixdt:true, spf:10, story:true, y:[-0.1,1.6],
     ic:{ u:{tool:'gauss', A:1, w:2.8, x0:-15, k0:3} } },
 
   /* Единственный пресет, где комплексность не про квантовую механику: у
      Гинзбурга–Ландау мнимые части коэффициентов — это расстройка частоты. Считается
      ровно как любое другое уравнение, и в этом весь смысл снятого ограничения. */
-  { name:'Гинзбурга–Ландау (комплексный хаос)',
+  { name:'Гинзбург–Ландау (комплексный хаос)',
     eq:'ut = u + (1+i*a)*uxx - (1+i*b)*abs(u)^2*u',
     p:{a:2,b:-1}, L:100, N:512, dt:0.01, spf:12, y:[-0.1,1.6],
     ic:{ u:{tool:'noise', A:0.1, w:2} } },
 
-  { name:'Опрокидывание горба (Бюргерс без вязкости)', story:true, eq:'ut + u*ux = 0', L:20, N:512,
+  { name:'Бюргерс без вязкости (опрокидывание горба)', story:true, eq:'ut + u*ux = 0', L:20, N:512,
     dt:0.002, y:[-0.3,1.2], smooth:true,
     ic:{ u:{tool:'gauss',A:1,w:2} } },
-  { name:'Упругий отскок солитонов (синус-Гордон)', story:true, sol:true, eq:'utt = uxx - sin(u)', L:100, N:1024,
+  { name:'Синус-Гордон (упругий отскок солитонов)', story:true, sol:true, eq:'utt = uxx - sin(u)', L:100, N:1024,
     dt:0.01, fixdt:true, spf:10, y:[-0.3,1.8], sel:'ut', vis:{ u:false, ut:true },
     ic:{ u:{fn:SG.u}, ut:{fn:SG.ut} } },
-  { name:'Перенос горба со своей скоростью', story:true, eq:'ut = -v*ux\nvt = -v*vx + nu*vxx',
+  { name:'Пассивный перенос (горб едет по потоку Бюргерса)', story:true, eq:'ut = -v*ux\nvt = -v*vx + nu*vxx',
     p:{nu:0.05}, L:60, N:512, dt:0.003, y:[-0.5,1.3],
     ic:{ u:{fn:x => Math.exp(-Math.pow((x+12)/2,2)) + Math.exp(-Math.pow((x-12)/2,2))},
          v:{fn:x => 0.3*plateau(x,-12,5,1.5) - 0.3*plateau(x,12,5,1.5)} } }
@@ -393,14 +393,15 @@ const anyBr = (S, f) => !!S && S.br.some(b => f(b, S));
 /* `why` пустое у «системы»: что полей несколько, видно по самой формуле —
    раскрывать это в превью, где формула стоит строкой выше, незачем */
 const CHIPS = [
-  { id:'sys', name:'система', of: m => m.fields.length > 1 },
+  { id:'sys', name:'система', of: m => m.fields.length > 1,
+    tip:'полей несколько: у каждого своя кривая, свои начальные данные и своя строка в легенде.' },
   { id:'utt', name:'вторая производная по времени', of: m => m.comps.some(c => c.d > 0),
     why:'порядок понижается сам: появляются компоненты u и ut, у каждой свои начальные ' +
         'данные — задать можно не только форму, но и начальную скорость.' },
-  { id:'cx',  name:'комплексное поле', of: m => m.complex,
+  { id:'cx',  name:'комплексное поле', list:true, of: m => m.complex,
     why:'решение комплексное: на графике рисуется |ψ|, а цвет вдоль кривой — фаза, ' +
         'диаграмма x–t становится цветной. Появляется поле «импульс k₀».' },
-  { id:'nl',  name:'нелинейное', of: m => m.comps.some(c => c.explicit.some(it => isNonlin(it.node))),
+  { id:'nl',  name:'нелинейное', list:true, of: m => m.comps.some(c => c.explicit.some(it => isNonlin(it.node))),
     why:'есть член, где поле умножается само на себя (или стоит под функцией). Из него ' +
         'и берутся опрокидывание, хаос и солитоны — линейная задача так не умеет.' },
   /* Пятёрка по символу S(k). Порядок — от «ничего не меняется» к «растёт само»:
@@ -423,31 +424,68 @@ const CHIPS = [
       S.br.every(b => b.re.every(v => Math.abs(v) <= S.tol)),
     why:'ни одна гармоника не растёт и не затухает — меняются только фазы. Показания ' +
         'в легенде обязаны стоять на месте: если поехали, виноват шаг по времени.' },
-  { id:'sol', name:'солитоны', of: (m, p) => !!p.sol,
+  { id:'sol', name:'солитоны', list:true, of: (m, p) => !!p.sol,
     why:'у этой нелинейной задачи есть горбы, которые не расплываются: дисперсия растаскивает ' +
         'горб ровно настолько, насколько нелинейность его подтягивает. Высокий солитон уже и ' +
         'быстрее низкого, а после столкновения оба выходят целыми — только со сдвигом.' },
-  { id:'sc',  name:'сценарии', of: (m, p) => !!p.sc,
+  { id:'sc',  name:'сценарии', list:true, of: (m, p) => !!p.sc,
     why:'уравнение одно, а постановок несколько: они различаются начальными данными и ' +
         'выбираются кнопками «сценарий» в острове «Начальные данные».' },
   { id:'smt', name:'гашение включено', of: (m, p) => !!p.smooth,
     why:'решение за конечное время становится разрывным, и ряд Фурье отвечает на разрыв ' +
         'пилой. Пресет включает «∿ гасить осцилляции» — выключи кнопку и сравни.' },
-  { id:'st',  name:'поставленный опыт', of: (m, p) => !!p.story,
+  { id:'st',  name:'поставленный опыт', list:true, of: (m, p) => !!p.story,
     why:'не просто уравнение: начальные данные подобраны так, чтобы эффект был виден ' +
         'с первого запуска. Рисовать поверх можно, но опыт от этого кончится.' }
 ];
+
+/** фишки собранной модели: `p` даёт сетку (L, N) и то, чего в тексте нет — сценарии,
+ *  солитоны, «опыт», гашение */
+function chipsFor(m, p) {
+  const S = spectrum(m, p);            // считается один раз на задачу, а не на фишку
+  return CHIPS.filter(c => c.of(m, p, S));
+}
 
 /** фишки пресета: считаются один раз при загрузке — уравнения пресетов не меняются */
 function chipsOf(p) {
   let m = null;
   try { m = buildSystem(p.eq, Object.assign({}, p.p || {})); } catch (e) { return []; }
-  const S = spectrum(m, p);            // считается один раз на пресет, а не на фишку
-  return CHIPS.filter(c => c.of(m, p, S));
+  return chipsFor(m, p);
 }
 const FX = PRESETS.map(chipsOf);
 
-const chipRow = i => '<span class="fx">' + FX[i].map(c => chipIcon(c.id)).join('') + '</span>';
+/* В пункте списка — только пять фишек с `list:true` (нелинейное, солитоны,
+   комплексное поле, сценарии, опыт): они отвечают на «что это за задача» и тем
+   отличают соседей по списку. Остальные восемь говорят про механизм, и в строке
+   пункта их не читали: восемь значков подряд съедали имя, а разбирать ребус,
+   листая список, всё равно некогда. Полный набор — в строке под кнопкой
+   (`#fxbar`), для того уравнения, которое сейчас считается. */
+const chipRow = i => '<span class="fx">' +
+  FX[i].filter(c => c.list).map(c => chipIcon(c.id)).join('') + '</span>';
+
+/* Строка фишек под кнопкой списка: **полный набор для текущей системы**, с
+   подсказкой на каждой. Считается по уже собранной модели и по фактическому
+   состоянию — сетке, параметрам и кнопке гашения, — поэтому своё уравнение
+   получает ровно те же значки, что пресет: из текста вычисляется всё, кроме
+   сценариев, солитонов и «опыта», а эти три приезжают от пресета, совпавшего по
+   тексту (набрал КдФ руками — солитоны никуда не делись).
+   Обновляется при пересборке системы, смене параметра, смене сетки и гашения:
+   каждое из этого меняет символ S(k), а значит и половину набора. */
+function syncFx() {
+  const box = $('fxbar');
+  box.innerHTML = '';
+  const m = sim.model; if (!m) return;
+  const pr = PRESETS[matchPreset(S.appliedEq || $('eq').value)] || {};
+  const cs = chipsFor(m, { L: sim.L, N: sim.N, sol: pr.sol, sc: pr.sc, story: pr.story,
+                           smooth: S.smooth });
+  for (const c of cs) {
+    const el = document.createElement('span');
+    el.className = 'fxc';
+    el.setAttribute('data-tip', c.name + '|' + (c.why || c.tip));
+    el.innerHTML = chipIcon(c.id);
+    box.appendChild(el);
+  }
+}
 
 /* ================= картинки сценариев ================= */
 
@@ -1003,6 +1041,7 @@ function updateParams(params) {
     showError(null);
     showWarnings(m);
     refreshDt(true);
+    syncFx();                          // параметр входит в S(k): nu = 0 — это уже не сглаживание
   } catch (e) { showError(e); }
 }
 
@@ -1038,6 +1077,7 @@ function applySystem(text, params) {
     buildLegend(m); buildParamUI(m); clearXT();
     S.dead = false; refreshDt(true);
     syncEqUI();
+    syncFx();
     $('eq').blur();          // применилось — отпускаем поле, чтобы работал пробел
     return true;
   } catch (e) {
@@ -1733,6 +1773,7 @@ function setSmooth(on) {
   S.smooth = !!on;
   sim.smooth = S.smooth ? 1 : 0;
   $('smooth').classList.toggle('on', S.smooth);
+  syncFx();                            // «гашение включено» — фишка, и её включает эта кнопка
 }
 $('smooth').onclick = () => setSmooth(!S.smooth);
 
@@ -1824,6 +1865,7 @@ function regrid() {
   for (let c = 0; c < sim.M; c++)
     setIC(c, resample(old[c]), oldI[c] ? resample(oldI[c]) : null);
   clearXT(); refreshDt(true); draw();
+  syncFx();                            // фишки по S(k) читаются на тех k, что есть в сетке
 }
 $('N').onchange = regrid;
 $('L').onchange = regrid;
@@ -2071,7 +2113,7 @@ loadPreset(PRESETS[0]);
 syncPlay();
 requestAnimationFrame(frame);
 
-window.__difur = { S, sim, PRESETS, FX, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
+window.__difur = { S, sim, PRESETS, FX, CHIPS, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
                    prettyEq, fitMath, formatEq, refreshDt, frameSteps,
                    setBudget: ms => stepBudgetMs = ms,
                    stepInfo: () => ({ done: stepsDone, sps: stepsPerSec }) };

@@ -342,10 +342,22 @@ steps.push(() => {
   ck('нелинейность снимает «снос» и «без потерь»',
      !/adv|cons/.test(ids(at(/отскок/))) && !/adv|cons/.test(ids(at(/Кортевег/))),
      ids(at(/отскок/)) + ' / ' + ids(at(/Кортевег/)));
+  /* В пункте — только фишки с `list:true`: остальные говорят про механизм и висят
+     полным набором под кнопкой (#fxbar). Если этот тест начнёт считать все фишки,
+     значит ряд в пункте опять разросся до восьми значков и съел имя. */
   const bad = D.PRESETS.map((p, i) =>
-      list.children[i].querySelectorAll('svg.chip').length === D.FX[i].length ? null : p.name)
+      list.children[i].querySelectorAll('svg.chip').length ===
+      D.FX[i].filter(c => c.list).length ? null : p.name)
     .filter(Boolean);
-  ck('в каждом пункте значков столько же, сколько фишек', bad.length === 0, bad.join(' | '));
+  ck('в пункте ровно те значки, что помечены list', bad.length === 0, bad.join(' | '));
+  ck('механизм в пункт не лезет',
+     D.PRESETS.every((p, i) => ![...list.children[i].querySelectorAll('svg.chip')].length ||
+       D.FX[i].filter(c => c.list).length <= 5) &&
+     D.CHIPS.filter(c => c.list).map(c => c.id).join(',') === 'cx,nl,sol,sc,st',
+     D.CHIPS.filter(c => c.list).map(c => c.id).join(','));
+  ck('у КдФ в пункте два значка вместо трёх',
+     list.children[iKdV].querySelectorAll('svg.chip').length === 2,
+     list.children[iKdV].querySelectorAll('svg.chip').length);
 
   hover(at(/Хищник/));
   ck('превью раскрывает нелинейность словами', /нелинейное/.test(prev.textContent), prev.textContent);
@@ -368,6 +380,54 @@ steps.push(() => {
   ck('уход мыши прячет превью', !prev.classList.contains('on'));
   btn.click();                       // закрыть список
   ck('повторный клик закрывает список', !list.classList.contains('on'));
+});
+
+/* --- полный набор фишек под кнопкой списка (#fxbar) ---
+   В пункте остались только пять «что это за задача»; механизм (снос, дисперсия,
+   сглаживание, раскачка, «без потерь») ушёл под кнопку — и показывается для того
+   уравнения, которое сейчас считается, включая своё. Пресетные фишки при этом
+   считаются один раз (FX), а эти — каждый раз заново, поэтому тут проверяется
+   и то, что набор ходит за состоянием: за параметром, за сеткой, за гашением. */
+steps.push(() => {
+  const bar = $('fxbar');
+  const names = () => [...bar.children].map(e => e.getAttribute('data-tip').split('|')[0]);
+  const nameOf = id => D.CHIPS.find(c => c.id === id).name;
+  const iKdV = D.PRESETS.findIndex(p => /Кортевег/.test(p.name));
+  D.loadPreset(D.PRESETS[iKdV]);
+  ck('под кнопкой — полный набор пресета',
+     names().join(',') === D.FX[iKdV].map(c => c.name).join(','), names().join(','));
+  ck('строка фишек под кнопкой, а не над ней',
+     bar.getBoundingClientRect().top >= $('presetbtn').getBoundingClientRect().bottom - 0.5,
+     bar.getBoundingClientRect().top.toFixed(0));
+  // значок сам по себе ребус: под кнопкой он обязан иметь имя и расшифровку
+  ck('у каждой фишки есть имя и расшифровка',
+     [...bar.children].every(e => /^[^|]+\|.{20,}/.test(e.getAttribute('data-tip'))),
+     [...bar.children].map(e => e.getAttribute('data-tip')).join(' / '));
+
+  // своё уравнение: приписывать фишки некому, но всё, что выводится из текста,
+  // выводится и тут — ради этого набор и переехал под кнопку
+  D.applySystem('ut = uxx + u');
+  ck('своё уравнение получает вычисленные фишки',
+     names().join(',') === nameOf('dif') + ',' + nameOf('amp'), names().join(','));
+  // текст совпал с пресетом — вернулись и приписанные руками солитоны
+  D.applySystem('ut + u*ux + uxxx = 0');
+  ck('набранное руками КдФ получает солитоны', names().indexOf(nameOf('sol')) >= 0,
+     names().join(','));
+
+  const n0 = names().length;
+  $('smooth').click();
+  ck('кнопка гашения добавляет фишку', names().indexOf(nameOf('smt')) >= 0, names().join(','));
+  $('smooth').click();
+  ck('выключенное гашение фишку убирает',
+     names().length === n0 && names().indexOf(nameOf('smt')) < 0, names().join(','));
+
+  // параметр входит в символ S(k) наравне с производными: nu = 0 — уже не сглаживание
+  const iB = D.PRESETS.findIndex(p => /Бюргерс \(/.test(p.name));
+  D.loadPreset(D.PRESETS[iB]);
+  ck('у Бюргерса с вязкостью — сглаживание', names().indexOf(nameOf('dif')) >= 0, names().join(','));
+  D.applySystem(D.PRESETS[iB].eq, { nu:0 });
+  ck('нулевая вязкость сглаживание убирает', names().indexOf(nameOf('dif')) < 0, names().join(','));
+  D.loadPreset(D.PRESETS[0]);
 });
 
 /* --- рисование ставит счёт на паузу --- */
@@ -565,7 +625,7 @@ steps.push(() => {
 });
 
 steps.push(() => {
-  const p = D.PRESETS.find(q => /Опрокидывание/.test(q.name));
+  const p = D.PRESETS.find(q => /опрокидывание/.test(q.name));
   D.loadPreset(p);
   ck('пресет с опрокидыванием включает гашение сам',
      D.S.smooth && $('smooth').classList.contains('on'));
@@ -602,7 +662,7 @@ steps.push(() => {
    Тридцати шагов предыдущей проверки для этого мало: расплылось бы и линейное
    уравнение, а тут надо увидеть, что нелинейность держит форму долго. */
 steps.push(() => {
-  const p = D.PRESETS.find(q => /Нелинейное Шрёдингера/.test(q.name));
+  const p = D.PRESETS.find(q => /Нелинейный Шрёдингер/.test(q.name));
   D.loadPreset(p, 0);
   const mod = () => { const u=D.sim.getU(0), w=D.sim.getUi(0), a=new Float64Array(D.sim.N);
     for (let j=0;j<D.sim.N;j++) a[j]=Math.hypot(u[j],w[j]); return a; };

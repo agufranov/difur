@@ -35,7 +35,8 @@ steps.push(() => {
   ck('список открывается на телефоне', list.classList.contains('on'));
   const iKdV = at(/Кортевег/);
   const chips = [...list.children[iKdV].querySelectorAll('svg.chip')];
-  ck('у КдФ в пункте три значка', chips.length === 3, chips.length);
+  // два, а не три: «дисперсия» — про механизм, она уехала в строку под кнопкой
+  ck('у КдФ в пункте два значка', chips.length === 2, chips.length);
   const small = chips.filter(c => c.getBoundingClientRect().width < 12 ||
                                   c.getBoundingClientRect().height < 12);
   ck('значки не схлопнуты отступами', small.length === 0,
@@ -47,6 +48,17 @@ steps.push(() => {
   const cr = chips[chips.length-1].getBoundingClientRect();
   ck('значки внутри списка, а не за краем', cr.right <= lr.right + 0.5,
      cr.right.toFixed(1) + ' vs ' + lr.right.toFixed(1));
+  /* Та же грабля общего имени класса, что и у `.chip`: строка фишек под кнопкой
+     живёт на `.fxc`, и на телефоне по ней целятся пальцем, а не мышью. */
+  const bar = [...$('fxbar').children];
+  ck('строка фишек под кнопкой не пуста на телефоне', bar.length > 0, bar.length);
+  const tiny = bar.filter(e => e.getBoundingClientRect().width < 24 ||
+                               e.getBoundingClientRect().height < 24);
+  ck('фишки под кнопкой не мельче пальца', tiny.length === 0,
+     bar.map(e => e.getBoundingClientRect().width.toFixed(1) + '×' +
+                  e.getBoundingClientRect().height.toFixed(1)).join(' '));
+  ck('фишки под кнопкой подписаны', bar.every(e => /\|/.test(e.getAttribute('data-tip') || '')),
+     bar.map(e => e.getAttribute('data-tip')).join(' / '));
 });
 
 /* --- тап по пункту показывает формулу и НЕ выбирает ---
