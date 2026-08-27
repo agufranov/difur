@@ -619,6 +619,83 @@ steps.push(() => {
   $('N').value='512'; $('N').dispatchEvent(new Event('change'));
 });
 
+/* --- запас за окном: кольцо шире экрана --- */
+function padBtn(k){ return $('pad').querySelector('[data-p="'+k+'"]'); }
+/* максимум только по тому, что видно; за окном поле живёт своей жизнью */
+function umaxWin(){
+  const N = D.sim.N, j0 = Math.ceil(N*(1-1/D.S.pad)/2), j1 = N-j0, u = D.sim.getU(0);
+  let m = 0; for (let j=j0;j<j1;j++) m = Math.max(m, Math.abs(u[j]));
+  return m;
+}
+steps.push(() => {
+  D.loadPreset(D.PRESETS[0]);
+  ck('по умолчанию запаса нет', D.S.pad===1 && Math.abs(D.viewL()-D.sim.L)<1e-12);
+  ck('при pad=1 весь холст под графиком', D.u2py(D.S.yMax)===0);
+  ck('кнопок запаса три', $('pad').children.length===3);
+
+  const L0 = D.sim.L, N0 = D.sim.N, dx0 = L0/N0, top0 = umax(0);
+  padBtn(2).click();
+  ck('×2 удлиняет кольцо', Math.abs(D.sim.L-2*L0)<1e-12, D.sim.L);
+  ck('×2 добавляет узлов', D.sim.N===2*N0, D.sim.N);
+  ck('dx не изменился', Math.abs(D.sim.L/D.sim.N-dx0)<1e-15, (D.sim.L/D.sim.N).toFixed(6));
+  ck('окно осталось прежним', Math.abs(D.viewL()-L0)<1e-12, D.viewL());
+  ck('профиль в окне не поехал', Math.abs(umaxWin()-top0)<1e-9, top0.toFixed(6)+' -> '+umaxWin().toFixed(6));
+  ck('кнопка ×2 подсвечена', padBtn(2).classList.contains('on') && !padBtn(1).classList.contains('on'));
+
+  const r = rect();
+  ck('край окна — край холста', Math.abs(D.x2px(D.viewL()/2) - r.width) < 1, D.x2px(D.viewL()/2).toFixed(1)+' vs '+r.width.toFixed(1));
+  // запас делится поровну на обе стороны, поэтому край кольца — это ещё полокна
+  ck('край кольца ушёл за холст', Math.abs(D.x2px(D.sim.L/2) - r.width*1.5) < 1,
+     D.x2px(D.sim.L/2).toFixed(1)+' vs '+(r.width*1.5).toFixed(1));
+  ck('верх холста отдан радару', D.u2py(D.S.yMax) > 8, D.u2py(D.S.yMax).toFixed(1));
+  // радар обязан быть нарисован, а не «выделен и забыт»: фон запаса темнее фона
+  // окна, и по этой границе видно, какая часть кольца показана крупно
+  const g = plot.getContext('2d'), dpr = window.devicePixelRatio || 1;
+  const at = (fx, py) => g.getImageData(Math.round(r.width*fx*dpr), Math.round(py*dpr), 1, 1).data;
+  const outside = at(0.06, 8), inside = at(0.5, 8);
+  ck('радар отделяет запас от окна', outside.join() !== inside.join(),
+     'запас rgb('+[...outside].slice(0,3)+') окно rgb('+[...inside].slice(0,3)+')');
+  ck('диаграмма x–t объявляет кольцо целиком', /кольцо/.test($('xtag').textContent), $('xtag').textContent);
+});
+
+/* мышь рисует туда, куда показывает курсор: окно и холст должны совпадать */
+steps.push(() => {
+  $('tools').querySelector('[data-tool="gauss"]').click();
+  $('wid').value='1.5'; $('wid').dispatchEvent(new Event('input'));
+  drag(0.25, 2);
+  const u = D.sim.getU(0), N = D.sim.N;
+  let jm = 0; for (let j=0;j<N;j++) if (Math.abs(u[j])>Math.abs(u[jm])) jm = j;
+  const xExp = -D.viewL()/4;                       // четверть холста слева от центра окна
+  ck('мышь рисует по окну, а не по кольцу', Math.abs(D.sim.x[jm]-xExp) < 0.5,
+     'пик на x='+D.sim.x[jm].toFixed(2)+', ждали '+xExp.toFixed(2));
+});
+
+/* то, ради чего всё: волна уходит за экран и не влетает сразу с другой стороны */
+steps.push(() => {
+  setEq('ut + ux = 0');
+  $('tools').querySelector('[data-tool="gauss"]').click();
+  $('wid').value='1'; $('wid').dispatchEvent(new Event('input'));
+  drag(0.5, 1);
+  const L0 = D.viewL();
+  const go = T => { for (let i=0, n=Math.round(T/D.sim.dt); i<n; i++) D.sim.step(); };
+  go(L0*0.75);                                     // горб уехал на 3/4 окна вправо
+  ck('горб ушёл из окна', umaxWin() < 0.05, 'в окне '+umaxWin().toFixed(4));
+  ck('но не пропал: он в запасе', Math.abs(umax(0)-1) < 0.02, 'на кольце '+umax(0).toFixed(4));
+  go(L0*1.25);                                     // всего пройдено ровно кольцо
+  ck('через кольцо горб вернулся в окно', Math.abs(umaxWin()-1) < 0.02, 'в окне '+umaxWin().toFixed(4));
+});
+
+steps.push(() => {
+  const L0 = D.viewL();
+  padBtn(1).click();
+  ck('возврат к «нет» укорачивает кольцо', Math.abs(D.sim.L-L0)<1e-12, D.sim.L);
+  ck('и возвращает график на весь холст', D.u2py(D.S.yMax)===0);
+  padBtn(4).click();
+  ck('×4 — кольцо вчетверо длиннее окна', Math.abs(D.sim.L-4*D.viewL())<1e-12, D.sim.L);
+  D.loadPreset(D.PRESETS[0]);
+  ck('пресет сбрасывает запас', D.S.pad===1 && padBtn(1).classList.contains('on'));
+});
+
 /* --- гашение осцилляций --- */
 steps.push(() => {
   D.loadPreset(D.PRESETS[0]);

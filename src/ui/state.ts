@@ -35,6 +35,7 @@ export interface UIState {
   sel: number; vis: boolean[]; ic: (Float64Array | null)[]; icI: (Float64Array | null)[];
   base: Float64Array | null; drag: Drag | null; dead: boolean;
   scen: number; k0: number; wasRunning: boolean; smooth: boolean; appliedEq: string | null;
+  pad: number;
 }
 
 export const S: UIState = {
@@ -43,6 +44,7 @@ export const S: UIState = {
   autoY:true, yMin:-1, yMax:4, showIC:true,
   sel:0, vis:[], ic:[], icI:[], base:null, drag:null, dead:false,
   scen:-1,                             // выбранный сценарий пресета (-1 — сценариев нет)
+  pad:1,                               // расчётная область шире окна показа во столько раз (1, 2, 4)
   k0:0,                                // импульс: фаза e^{ik₀x} у комплексного поля
   wasRunning:false,                    // счёт до нажатия мыши — вернуть после отпускания
   smooth:false,                        // гашение осцилляций опрокидывания
@@ -53,6 +55,19 @@ export const sim = new Sim();
 
 /** размеры холста графика в CSS-пикселях; ставит fitCanvas() */
 export const view = { PW: 800, PH: 400 };
+
+/** Длина того, что видно. Расчётное кольцо `sim.L` может быть шире окна в
+ *  `S.pad` раз: кольцо от этого не размыкается, но волна, доехав до края экрана,
+ *  уезжает в невидимый запас, а не влетает сразу же с другой стороны. Всё, что
+ *  на экране, отмеряется отсюда; всё, что про счёт (dx, k, диагностика), —
+ *  по-прежнему от `sim.L`. */
+export const viewL = () => sim.L / S.pad;
+
+/** Полоска-радар (поле целиком) занимает верх холста, и график съезжает под неё.
+ *  Функция, а не поле в `view`: поле пришлось бы синхронизировать при каждой
+ *  смене запаса, а забытая синхронизация проявилась бы съехавшей мышью. */
+export const RADAR_H = 26;
+export const topInset = () => S.pad > 1 ? RADAR_H + 8 : 0;
 
 /** счётчики кадра. stepBudgetMs — сколько миллисекунд кадра отдаём счёту;
     меняется только из тестов (setBudget): под virtual-time в headless

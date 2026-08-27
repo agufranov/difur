@@ -1,10 +1,15 @@
 /* ================= автомасштаб оси Y ================= */
 import { $i, S, clamp, sim } from './state';
+import { viewRange } from './geometry';
 
 const Y_LIMIT = 1000;     // дальше автомасштаб не уезжает: при разносе видно, что разнесло, и хватит
 
+/* Масштаб считается только по окну показа: иначе горб, уехавший в невидимый
+   запас, продолжал бы задавать шкалу — картинка на экране прыгала бы от того,
+   чего на экране нет. При pad=1 диапазон — вся сетка, и число прежнее. */
 export function autoscale() {
   if (!S.autoY || S.drag || !sim.model) return;
+  const [j0, j1] = viewRange();
   let lo = Infinity, hi = -Infinity;
   for (const comp of sim.model.comps) {
     if (!S.vis[comp.ci]) continue;
@@ -13,10 +18,10 @@ export function autoscale() {
     if (comp.complex) {
       const w = sim.getUi(comp.ci);
       if (0 < lo) lo = 0;
-      for (let j = 0; j < sim.N; j++) { const m = Math.hypot(u[j], w[j]); if (m > hi) hi = m; }
+      for (let j = j0; j < j1; j++) { const m = Math.hypot(u[j], w[j]); if (m > hi) hi = m; }
       continue;
     }
-    for (let j = 0; j < sim.N; j++) {
+    for (let j = j0; j < j1; j++) {
       if (u[j] < lo) lo = u[j];
       if (u[j] > hi) hi = u[j];
     }

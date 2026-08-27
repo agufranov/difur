@@ -12,7 +12,7 @@ export interface ICDesc {
 export interface Scenario {
   name: string; icon: string; tip: string;
   ic: Record<string, ICDesc>;
-  k0?: number; N?: number; y?: [number, number];
+  k0?: number; N?: number; y?: [number, number]; pad?: number;
 }
 
 export interface Preset {
@@ -21,6 +21,8 @@ export interface Preset {
   ic?: Record<string, ICDesc>;
   sc?: Scenario[];
   sol?: boolean; story?: boolean; smooth?: boolean; fixdt?: boolean;
+  /** запас за окном: кольцо в pad раз длиннее того, что видно (1, 2, 4) */
+  pad?: number;
   spf?: number; vis?: Record<string, boolean>; sel?: string;
 }
 

@@ -1,7 +1,7 @@
 /* ================= холсты: график и диаграмма x–t ================= */
-import { $, S, sim, view } from './state';
+import { $, RADAR_H, S, clamp, sim, topInset, view, viewL } from './state';
 import { cmap, cmapCx, phaseColor } from './colormap';
-import { compColor, u2py, x2px } from './geometry';
+import { compColor, u2py, viewRange, x2px } from './geometry';
 
 export const plot = $('plot') as HTMLCanvasElement;
 export const pctx = plot.getContext('2d')!;
@@ -42,8 +42,20 @@ export function pushRow() {
 export function showXT() {
   if (xtBuf[S.sel]) xctx.putImageData(xtBuf[S.sel], 0, 0);
   else { xctx.fillStyle = '#0a0e15'; xctx.fillRect(0,0,XT_W,XT_H); }
+  // Диаграмма всегда показывает кольцо целиком, а границы окна отмечены
+  // линиями: именно здесь заранее видно волну, которая идёт по запасу к экрану.
+  // Запас не затемняем — затемнить его значило бы спрятать ровно то, ради чего
+  // диаграмма и оставлена во всю ширину.
+  if (S.pad > 1) {
+    const a = XT_W*(1 - 1/S.pad)/2, b = XT_W - a;
+    xctx.strokeStyle = '#7f93ad'; xctx.lineWidth = 2; xctx.setLineDash([6,5]);
+    xctx.beginPath();
+    xctx.moveTo(a,0); xctx.lineTo(a,XT_H); xctx.moveTo(b,0); xctx.lineTo(b,XT_H);
+    xctx.stroke(); xctx.setLineDash([]);
+  }
   const n = sim.model ? sim.model.comps[S.sel].name : '';
-  $('xtag').textContent = 'диаграмма x–t: ' + n + ' (время вниз)';
+  $('xtag').textContent = 'диаграмма x–t: ' + n + ' (время вниз)'
+    + (S.pad > 1 ? ' · всё кольцо, пунктир — края окна' : '');
 }
 
 /* ================= отрисовка ================= */
@@ -86,6 +98,42 @@ function curveCx(ci: number, width: number, fill: boolean) {
   ctx.restore();
 }
 
+/* ================= радар: поле целиком ================= */
+/** Полоска сверху: всё расчётное кольцо в сжатом масштабе и рамка окна показа.
+    Нужна ровно потому, что запас за окном невидим: без неё волна, ушедшая за
+    край экрана, возвращалась бы через полкольца сюрпризом — а так её видно всю
+    дорогу. При pad=1 полоски нет и график занимает холст целиком, как раньше. */
+function radar() {
+  const c = pctx, PW = view.PW, N = sim.N, H = RADAR_H;
+  const top = 2, bot = H - 2;
+  const X = (j: number) => j/(N-1)*PW;
+  const Y = (u: number) => clamp(bot - (u - S.yMin)/(S.yMax - S.yMin)*(bot - top), top, bot);
+  const [j0, j1] = viewRange();
+  const wx0 = X(j0), wx1 = X(j1 - 1);
+  c.save();
+  c.fillStyle = '#0a0e15'; c.fillRect(0, 0, PW, H);          // запас — темнее
+  c.fillStyle = '#0e1420'; c.fillRect(wx0, 0, wx1 - wx0, H); // окно — фоном графика
+  if (sim.model)
+    for (const comp of sim.model.comps) {
+      if (!S.vis[comp.ci]) continue;
+      const u = sim.getU(comp.ci), w = comp.complex ? sim.getUi(comp.ci) : null;
+      c.strokeStyle = compColor(comp); c.lineWidth = 1;
+      c.globalAlpha = comp.ci === S.sel ? 0.95 : 0.5;
+      c.beginPath();
+      for (let j = 0; j < N; j++) {
+        const v = w ? Math.hypot(u[j], w[j]) : u[j];
+        j ? c.lineTo(X(j), Y(v)) : c.moveTo(X(j), Y(v));
+      }
+      c.stroke();
+    }
+  c.globalAlpha = 1;
+  c.strokeStyle = '#2f4560'; c.lineWidth = 1;
+  c.strokeRect(wx0 + 0.5, 0.5, wx1 - wx0 - 1, H - 1);
+  c.fillStyle = '#41536b'; c.font = '9px Consolas,monospace';
+  c.fillText('кольцо L=' + sim.L.toFixed(0), 3, H - 5);
+  c.restore();
+}
+
 function curve(arr: ArrayLike<number>, color: string, dash: number[], width: number, alpha?: number) {
   const ctx = pctx, N = sim.N;
   ctx.save();
@@ -102,10 +150,11 @@ function curve(arr: ArrayLike<number>, color: string, dash: number[], width: num
 }
 
 export function draw() {
-  const c = pctx, PW = view.PW, PH = view.PH;
+  const c = pctx, PW = view.PW, PH = view.PH, TOP = topInset();
   c.clearRect(0,0,PW,PH);
   c.fillStyle = '#0e1420'; c.fillRect(0,0,PW,PH);
   c.font = '10px Consolas,monospace'; c.lineWidth = 1;
+  if (S.pad > 1) radar();
 
   const sy = niceStep(S.yMax - S.yMin);
   for (let v = Math.ceil(S.yMin/sy)*sy; v <= S.yMax; v += sy) {
@@ -115,14 +164,18 @@ export function draw() {
     c.fillStyle = '#5d708a';
     c.fillText(v.toFixed(Math.max(0, -Math.floor(Math.log10(sy)))), 4, y-3);
   }
-  const sx = niceStep(sim.L);
-  for (let v = Math.ceil(-sim.L/2/sx)*sx; v <= sim.L/2; v += sx) {
+  // сетка по x отмеряется по окну: за его краями холста нет
+  const VL = viewL(), sx = niceStep(VL);
+  for (let v = Math.ceil(-VL/2/sx)*sx; v <= VL/2; v += sx) {
     const x = x2px(v);
     c.strokeStyle = '#18222f';
-    c.beginPath(); c.moveTo(x,0); c.lineTo(x,PH); c.stroke();
+    c.beginPath(); c.moveTo(x,TOP); c.lineTo(x,PH); c.stroke();
     c.fillStyle = '#41536b'; c.fillText(v.toFixed(0), x+3, PH-6);
   }
   if (!sim.model) return;
+  // кривые обрезаются по полю графика: горб выше yMax иначе залез бы на радар
+  c.save();
+  c.beginPath(); c.rect(0, TOP, PW, PH - TOP); c.clip();
 
   // начальные условия — призраком (у комплексного поля призрак тоже по модулю)
   if (S.showIC)
@@ -158,4 +211,5 @@ export function draw() {
           comp.d ? [7,4] : [], isSel ? 2.2 : 1.5, comp.d ? 0.85 : 1);
     c.shadowBlur = 0;
   }
+  c.restore();
 }

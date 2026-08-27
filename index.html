@@ -114,7 +114,10 @@
       <summary>сетка и шаг</summary>
       <div class="row"><label>узлов N</label>
         <select id="N"><option>128</option><option>256</option><option selected>512</option><option>1024</option><option>2048</option></select></div>
-      <div class="row"><label>период L</label><input type="number" id="L" value="40" step="1" min="1"></div>
+      <div class="row"><label>окно L</label><input type="number" id="L" value="40" step="1" min="1"
+        data-tip="Окно|Длина того, что видно на графике. Если задан запас, расчётное кольцо во столько же раз длиннее."></div>
+      <div class="row"><label>запас за окном</label><div id="pad" class="seg"
+        data-tip="Запас за окном|Границы периодические: область — кольцо, и волна, ушедшая за правый край, влетает слева. Запас делает кольцо вдвое или вчетверо длиннее окна: волна уезжает в невидимую часть, и до возвращения проходит во столько же раз больше времени. Поле целиком видно на полоске над графиком и на диаграмме x–t. Платим счётом: узлов во столько же раз больше."></div></div>
       <div class="row"><label>шаг dt</label><input type="number" id="dt" value="0.005" min="1e-6" step="0.001"></div>
       <label class="chk"><input type="checkbox" id="autodt" checked>подбирать dt автоматически</label>
       <label class="chk"><input type="checkbox" id="coarsedt"
@@ -134,7 +137,9 @@
         <code>uvvxxux</code> = <code>u*v*vxx*ux</code>.<br>
         Остальные буквы — константы с ползунком (логарифмическая шкала).
         Ещё есть <code>x, t, pi</code>, функции <code>sin cos exp tanh sech abs sqrt</code>,
-        степени <code>u^2</code>. Границы периодические.<br>
+        степени <code>u^2</code>. Границы периодические: область — это кольцо, и волна,
+        ушедшая за правый край, влетает слева. «Запас за окном» в «сетке и шаге» делает
+        кольцо длиннее экрана, чтобы это случилось не сразу.<br>
         <b>i</b> — мнимая единица: <code>ut = i*uxx</code> это Шрёдингер. У такого поля
         на графике рисуется <b>|ψ|</b>, а цвет вдоль кривой — фаза; «импульс k₀»
         задаёт e<sup>ik₀x</sup>, и пакет едет со скоростью 2k₀. Ограничений нет:

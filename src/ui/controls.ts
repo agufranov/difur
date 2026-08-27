@@ -57,8 +57,13 @@ export function syncSpeed() {
     b.classList.toggle('on', S.spf === Math.round(S.baseSpf * +b.dataset.k!));
 }
 
+/** `#N` и `#L` — узлы и длина ОКНА; расчётное кольцо в `S.pad` раз длиннее и
+    во столько же раз подробнее, поэтому dx от запаса не зависит вовсе. */
+export function gridN() { return (+$i('N').value)*S.pad; }
+export function gridL() { return Math.max(0.1, +$i('L').value)*S.pad; }
+
 function regrid() {
-  const N = +$i('N').value, L = Math.max(0.1, +$i('L').value);
+  const N = gridN(), L = gridL();
   const oldN = sim.N;
   const old = sim.model!.comps.map(c => Float64Array.from(sim.getU(c.ci)));
   const oldI = sim.model!.comps.map(c => c.complex ? Float64Array.from(sim.getUi(c.ci)) : null);
@@ -77,6 +82,47 @@ function regrid() {
     setIC(c, resample(old[c]), oldI[c] ? resample(oldI[c]!) : null);
   clearXT(); refreshDt(true); draw();
   syncFx();                            // фишки по S(k) читаются на тех k, что есть в сетке
+}
+
+/* ================= запас за окном ================= */
+const PADS = [1, 2, 4];
+
+function buildPad() {
+  $('pad').innerHTML = PADS.map(k =>
+    '<button data-p="' + k + '">' + (k === 1 ? 'нет' : '×' + k) + '</button>').join('');
+  syncPad();
+}
+export function syncPad() {
+  for (const b of $('pad').children as HTMLCollectionOf<HTMLElement>)
+    b.classList.toggle('on', S.pad === +b.dataset.p!);
+}
+
+/** Смена запаса. Окно и всё, что в нём, обязано остаться на месте — меняется
+    только длина кольца, поэтому пересадка идёт по x, а не по номеру узла
+    (`regrid` пересаживает по номеру: там меняется подробность сетки, а не
+    область). dx при этом не меняется вовсе, и внутренность копируется точка в
+    точку. Новый запас заполняется значением на шве старого кольца: так поле
+    остаётся непрерывным и на стыках со старой областью, и на новом шве. */
+export function setPad(p: number) {
+  if (!sim.model || p === S.pad) return;
+  const oldL = sim.L, oldN = sim.N;
+  const old = sim.model.comps.map(c => Float64Array.from(sim.getU(c.ci)));
+  const oldI = sim.model.comps.map(c => c.complex ? Float64Array.from(sim.getUi(c.ci)) : null);
+  S.pad = p; syncPad();
+  const N = gridN(), L = gridL();
+  sim.resize(N, L);
+  const at = (src: Float64Array) => {
+    const out = new Float64Array(N);
+    for (let j = 0; j < N; j++) {
+      const q = clamp((sim.x[j] + oldL/2)/oldL*oldN, 0, oldN - 1);
+      const i0 = Math.floor(q), f = q - i0;
+      out[j] = src[i0]*(1-f) + src[Math.min(i0+1, oldN-1)]*f;
+    }
+    return out;
+  };
+  for (let c = 0; c < sim.M; c++) setIC(c, at(old[c]), oldI[c] ? at(oldI[c]!) : null);
+  clearXT(); refreshDt(true); draw();
+  syncFx();
 }
 
 export function initControls() {
@@ -141,6 +187,12 @@ export function initControls() {
 
   $i('N').onchange = regrid;
   $i('L').onchange = regrid;
+
+  buildPad();
+  $('pad').addEventListener('click', e => {
+    const b = (e.target as HTMLElement).closest('button[data-p]') as HTMLElement | null;
+    if (b) setPad(+b.dataset.p!);
+  });
 
   window.addEventListener('keydown', e => {
     const t = e.target as HTMLElement;

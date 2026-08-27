@@ -1,5 +1,5 @@
 /* ================= мышь ================= */
-import { $i, S, clamp, sim } from './state';
+import { $i, S, clamp, sim, viewL } from './state';
 import type { Drag } from './state';
 import { makeProfile, px2x, py2u } from './geometry';
 import { draw, plot } from './render';
@@ -97,7 +97,8 @@ export function initPointer() {
 
   plot.addEventListener('wheel', ev => {
     ev.preventDefault();
-    S.width = clamp(S.width*Math.exp(-ev.deltaY*0.0015), sim.L/sim.N, sim.L/2);
+    // шире окна рисовать незачем: остального всё равно не видно
+    S.width = clamp(S.width*Math.exp(-ev.deltaY*0.0015), sim.L/sim.N, viewL()/2);
     $i('wid').value = S.width.toFixed(2);
     if (S.drag && !S.drag.pen) { S.drag.w = S.width; applyDrag(); draw(); }
   }, { passive:false });

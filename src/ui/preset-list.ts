@@ -9,7 +9,7 @@ import { makeIC, setIC } from './ic';
 import { buildLegend } from './diag';
 import { buildScen } from './scen';
 import { clearXT, draw } from './render';
-import { setSmooth, syncPlay, syncSpeed } from './controls';
+import { setSmooth, syncPad, syncPlay, syncSpeed } from './controls';
 
 const sel = $('preset') as HTMLSelectElement;
 const pbtn = $('presetbtn'), plist = $('plist'), eqprev = $('eqprev');
@@ -160,8 +160,12 @@ export function loadPreset(p: Preset, si?: number) {
   const idx = PRESETS.indexOf(p); if (idx >= 0) { sel.value = String(idx); syncPresetBtn(); }
   S.scen = p.sc ? clamp((si as number) | 0, 0, p.sc.length - 1) : -1;
   const cfg: PresetCfg = p.sc ? Object.assign({}, p, p.sc[S.scen]) : p;
+  // Запас за окном — часть постановки (кольцо становится длиннее), поэтому
+  // пресет задаёт его наравне с L и N, а чего в пресете нет, то сбрасывается:
+  // иначе задача считалась бы не тем, что написано в пресете.
+  S.pad = cfg.pad || 1; syncPad();
   $i('N').value = String(cfg.N); $i('L').value = String(cfg.L);
-  sim.resize(cfg.N, cfg.L);
+  sim.resize(cfg.N*S.pad, cfg.L*S.pad);
   $i('eq').value = cfg.eq;
   autosizeEq();
   S.sel = 0; S.ic = []; S.icI = []; S.vis = [];

@@ -2,7 +2,7 @@
    только порядок: он повторяет порядок верхнеуровневых обработчиков старого
    монолитного app.js, чтобы поведение при загрузке осталось прежним. */
 import './styles/main.css';
-import { S, rt, sim, MOB } from './ui/state';
+import { S, rt, sim, MOB, viewL } from './ui/state';
 import { PRESETS } from './ui/presets';
 import { CHIPS, FX } from './ui/chips';
 import { px2x, py2u, u2py, x2px } from './ui/geometry';
@@ -11,7 +11,7 @@ import { initEqInput } from './ui/eq-input';
 import { initTips } from './ui/tooltip';
 import { initScen } from './ui/scen';
 import { initPointer } from './ui/pointer';
-import { buildTools, initControls, syncPlay } from './ui/controls';
+import { buildTools, initControls, setPad, syncPlay } from './ui/controls';
 import { initPresetList, loadPreset } from './ui/preset-list';
 import { initMobile, relayout } from './ui/mobile';
 import { draw, fitCanvas } from './ui/render';
@@ -43,6 +43,7 @@ requestAnimationFrame(frame);
 /* контракт тестов (tests/ui-driver.js, tests/ui-mobile.js): единственный глобал */
 declare global { interface Window { __difur: unknown } }
 window.__difur = { S, sim, PRESETS, FX, CHIPS, MOB, loadPreset, px2x, py2u, x2px, u2py, applySystem,
+                   viewL, setPad,
                    prettyEq, fitMath, formatEq, refreshDt, frameSteps,
                    setBudget: (ms: number) => rt.stepBudgetMs = ms,
                    stepInfo: () => ({ done: rt.stepsDone, sps: rt.stepsPerSec }) };
