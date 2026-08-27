@@ -1,11 +1,31 @@
-# `core.js` — разбор системы и решатель
+# Ядро (`src/core/`) — разбор системы и решатель
 
-**Без единого обращения к DOM.** Экспортирует
-`window.DifurCore = { FFT, Sim, buildSystem, parseOne, tokenize, scanFields, splitAtoms, phis }`.
-Тестируется отдельно от интерфейса; всё, что можно проверить числом, проверяется здесь.
+**Без единого обращения к DOM** — это инвариант слоя. Ядро живёт в
+`src/core/*.ts` (TypeScript, ES-модули), публичное API реэкспортирует
+`src/core/index.ts`: `FFT, Sim, buildSystem, parseOne, tokenize, scanFields,
+splitAtoms, phis` плюс типы (`Model`, `Node`, `Comp`, …).
 
-Отсюда же — возможность гонять ядро под node и писать численные лаборатории
-в тридцать строк, см. [docs/testing.md](testing.md).
+| Модуль | Что внутри |
+|---|---|
+| `fft.ts` | radix-2 FFT in-place |
+| `complex.ts` | `CX`/`cxMul`/`cxPow`… (свёртка констант) и `CT`/`CFN` (runtime явной части) |
+| `types.ts` | AST-узлы, `Model`/`Comp`/`Cross`, `PosError` — общий словарь с интерфейсом |
+| `lexer.ts` | `tokenize`, `splitAtoms`, `scanFields`, `errAt`/`span`, таблицы `FUNCS`/`REALFN`/`RESERVED` |
+| `parser.ts` | `parseOne` (рекурсивный спуск), обходы `walk`/`flatten`/`contains` |
+| `fold.ts` | `constVal`/`tryConst`, `asLinear`, `coefOfAtom` |
+| `codegen.ts` | `gen` (вещественная ветка, текст прежний слово в слово), `makeGen` (комплексная + типизация) |
+| `system.ts` | `splitEqs`, `buildSystem` — конвейер сборки модели |
+| `phis.ts` | φ-функции ETDRK4 |
+| `sim.ts` | класс `Sim`: сетка, символ, шаг, гашение, диагностика |
+
+Миграция из монолитного `core.js` — чистая пересадка: ни одного логического
+изменения, сгенерированный код явной части сверен со старым байт в байт на
+11 системах (вещественных и комплексных), все эталоны точности ниже — те же.
+
+Тесты ядра — `npx vitest run` ([tests/core/core.test.ts](../tests/core/core.test.ts)),
+92 проверки, порт прежнего `tests/core-tests.html` c дословными названиями и
+допусками. Всё, что можно проверить числом, проверяется здесь; численные
+лаборатории на node пишутся в тридцать строк, см. [docs/testing.md](testing.md).
 
 ## Конвейер `buildSystem(text, params)`
 
