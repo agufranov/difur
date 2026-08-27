@@ -7,8 +7,13 @@ import { resolve } from 'node:path';
    и скармливает их Edge). */
 export default defineConfig(({ mode }) => ({
   base: './',
+  /* esbuild только сжимает CSS; штатный минификатор переписывал
+     `(max-width:760px)` в range-синтаксис `(width<=760px)`, и тест на
+     совпадение @media с константой MOB (src/ui/state.ts) переставал видеть
+     порог телефона в CSSOM */
   build: mode === 'test'
     ? {
+        cssMinify: 'esbuild' as const,
         outDir: 'dist-test',
         rollupOptions: {
           input: {
@@ -17,5 +22,5 @@ export default defineConfig(({ mode }) => ({
           },
         },
       }
-    : { outDir: 'dist' },
+    : { cssMinify: 'esbuild' as const, outDir: 'dist' },
 }));

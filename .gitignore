@@ -4,3 +4,5 @@ dist-test/
 _ui-test.html
 _ui-mobile.html
 _lab.html
+tests/ui.html
+tests/mobile.html

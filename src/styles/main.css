@@ -1,0 +1,453 @@
+  :root{
+    --bg:#0a0e15; --panel:#111827; --panel2:#0e1420; --line:#1e2a3b;
+    --txt:#d8e3f0; --dim:#7b8ca3; --accent:#5ad1ff; --accent2:#ffb454;
+    --bad:#ff6b6b; --ok:#63d68a; --isl:#16202f; --par:#c9a1ff;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--txt);
+       font:13px/1.45 "Segoe UI",system-ui,sans-serif;overflow:hidden}
+  /* dvh — потому что на телефоне 100vh считается без убирающейся адресной строки:
+     нижняя строка пульта уезжала бы под неё */
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+
+  header{display:flex;align-items:flex-start;gap:10px;padding:8px 12px;
+         background:var(--panel);border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  header .lg{font-size:20px;color:var(--accent);font-weight:600;letter-spacing:.5px;padding-top:4px}
+
+  /* поле ввода: прозрачный textarea поверх подложки — весь видимый текст (раскраска
+     и метка ошибки) рисуется на подложке. Шрифт, паддинг, рамка и правила переноса
+     у них обязаны совпадать, иначе раскраска уедет относительно каретки. */
+  #eqbox{flex:1;min-width:180px}
+  #eqfield{position:relative}
+  /* правый отступ — место под кнопку «применить» внутри поля. Он одинаков у обоих
+     слоёв и на всех строках: перенос обязан считаться в них одинаково, иначе
+     раскраска уедет относительно каретки */
+  #eq,#eqhl{display:block;width:100%;margin:0;border:1px solid var(--line);border-radius:6px;
+      padding:7px 42px 7px 10px;font:14px/1.5 "Cascadia Mono",Consolas,monospace;
+      white-space:pre-wrap;overflow-wrap:break-word}
+  /* высоту задаёт autosizeEq() в src/ui/highlight.ts; max-height — предохранитель на длинную систему */
+  #eq{position:relative;z-index:1;background:transparent;color:transparent;
+      caret-color:var(--txt);resize:none;height:38px;max-height:40vh;overflow:auto}
+  #eq::selection{background:rgba(90,209,255,.28)}
+  #eqhl{position:absolute;inset:0;z-index:0;background:var(--panel2);color:var(--txt);
+        border-color:transparent;pointer-events:none;overflow:hidden}
+  #eq:focus{outline:none;border-color:var(--accent)}
+  #eq.bad,#eq.bad:focus{border-color:var(--bad)}
+  /* виноватый кусок прямо в поле: заливка, рамка и волна. Ни жирного, ни другого
+     кегля — это сдвинуло бы текст относительно каретки (см. правило ниже) */
+  #eqhl .mk{background:rgba(255,107,107,.26);border-radius:3px;
+            box-shadow:0 0 0 1px rgba(255,107,107,.5);
+            text-decoration:underline wavy var(--bad);text-decoration-skip-ink:none;
+            text-underline-offset:3px}
+  /* раскраска ввода: поля — цветом своей кривой (задаётся на месте), остальное здесь.
+     Ни жирного, ни курсива: в подложке они сдвинули бы текст относительно каретки. */
+  #eqhl .dv{opacity:.72}                    /* хвост производной: ux, utt */
+  #eqhl .pr{color:var(--par)}               /* константы */
+  #eqhl .fn{color:var(--ok)}                /* функции */
+  #eqhl .cn{color:#93a6bd}                  /* x, t, pi, e */
+  #eqhl .nu{color:var(--txt)}
+  #eqhl .op{color:#6f8199}
+  #eqhl .cm{color:var(--dim)}
+
+  /* список пресетов: кнопка + свой выпадающий список + превью формулы справа */
+  #presetbox{position:relative;width:300px;flex:none}
+  #presetbtn{width:100%;text-align:left;padding:7px 10px;display:flex;align-items:center}
+  #presetbtn::after{content:"▾";margin-left:auto;padding-left:8px;color:var(--dim)}
+  #presetbtn.open{border-color:var(--accent);color:#fff}
+  #plist{display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;width:100%;
+         max-height:min(62vh,440px);overflow-y:auto;padding:4px;background:var(--isl);
+         border:1px solid #2b3d57;border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  #plist.on{display:block}
+  /* Строка фишек под кнопкой: значки крупнее списочных — по ним целятся мышью
+     (и пальцем на телефоне), чтобы прочитать подсказку. Пустая строка убирается
+     целиком: у «Переноса» фишек две, а у своего кривого уравнения ни одной, и
+     висящий пустой отступ поднимал бы шапку зря. */
+  #fxbar{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px;color:var(--dim)}
+  #fxbar:empty{display:none}
+  .fxc{display:block;padding:3px;border-radius:5px;cursor:help}
+  .fxc:hover{background:#12384a;color:var(--accent)}
+  .fxc svg.chip{width:16px;height:16px}
+  #plist::-webkit-scrollbar{width:8px}
+  #plist::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
+  /* имя слева, значки-фишки прижаты к правому краю; ужимается при нехватке
+     места именно имя (multiline-ellipsis у флекса работает только с min-width:0) */
+  .pitem{display:flex;align-items:center;gap:8px;padding:5px 9px;border-radius:6px;cursor:pointer}
+  .pitem .nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pitem.cur{color:var(--accent)}
+  .pitem.hi{background:#12384a;color:#fff}
+
+  /* фишки: значок один и тот же и в списке, и в расшифровке под формулой */
+  svg.chip{display:block;width:14px;height:14px;flex:none;
+           fill:none;stroke:currentColor;stroke-width:1.3;
+           stroke-linejoin:round;stroke-linecap:round}
+  svg.chip .fl{fill:currentColor;stroke:none}
+  svg.chip .dsh{stroke-dasharray:2.4 2}
+  /* буква в значке — тем же шрифтом, что формула в превью: значок «uₜₜ» и есть
+     кусок формулы, а не картинка про неё */
+  svg.chip text{fill:currentColor;stroke:none;
+                font:italic 10px/1 Cambria,Georgia,"Times New Roman",serif}
+  svg.chip text .sb{font-size:6.5px}
+  .fx{margin-left:auto;flex:none;display:flex;gap:5px;color:var(--dim)}
+  .pitem.hi .fx{color:var(--accent)}
+
+  #eqprev{position:fixed;z-index:70;visibility:hidden;opacity:0;transition:opacity .12s;
+          max-width:min(420px,42vw);padding:11px 15px;background:#16202f;
+          border:1px solid #2b3d57;border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.6);
+          pointer-events:none;overflow-x:auto}
+  #eqprev.on{visibility:visible;opacity:1}
+  /* имя пресета над формулой: формула может ездить по горизонтали, а имя обязано
+     переноситься и читаться целиком — ради этого превью его и показывает */
+  #eqprev .ttl{margin-bottom:8px;max-width:100%;font-size:13px;font-weight:600;
+               line-height:1.3;color:var(--txt);white-space:normal}
+  /* расшифровка фишек под формулой. Формула может быть шире окошка и ездить по
+     горизонтали (overflow-x у #eqprev), а текст обязан переноситься — отсюда
+     явный white-space:normal и ширина по контейнеру */
+  #eqprev .fxwhy{margin-top:10px;padding-top:9px;border-top:1px solid #2b3d57;
+                 display:grid;gap:7px;max-width:100%;font-size:12px;line-height:1.45;
+                 color:var(--dim);white-space:normal}
+  #eqprev .fxwhy>div{display:flex;gap:7px;align-items:flex-start}
+  #eqprev .fxwhy svg.chip{margin-top:2px}
+  #eqprev .fxwhy b{color:var(--txt);font-weight:600}
+  /* формула: боксы, как в TeX — дробь этажеркой, степень верхним индексом,
+     скобки не глифом, а нарисованные под высоту содержимого (см. fitMath) */
+  .peq{display:flex;align-items:stretch;gap:7px;
+       font:16px/1.75 Cambria,Georgia,"Times New Roman",serif;color:var(--txt)}
+  .peq .pl{white-space:nowrap}
+  .peq b{font-weight:400}                    /* поле; цвет — своей кривой, задан на месте */
+  .peq sub{font-size:.62em;vertical-align:-.28em;letter-spacing:.02em;opacity:.8}
+  .peq sup{font-size:.66em;vertical-align:.56em;letter-spacing:.02em}
+  .peq i{color:var(--par);font-style:italic}   /* константа с ползунком */
+  .peq .cn{color:#93a6bd}                      /* x, t, pi, e */
+  .peq .fnm{color:var(--ok)}
+  .peq .bo,.peq .eqs,.peq .mu,.peq .un,.peq .pn{color:#9fb0c6}
+  .peq .bo{margin:0 .3em}
+  .peq .eqs{margin:0 .44em}
+  .peq .mu{margin:0 .09em}
+  .peq .cm{color:var(--dim);font-size:.8em;font-style:italic}
+
+  .dlm{position:relative;flex:none;align-self:stretch}
+  .dlm>svg{position:absolute;left:0;top:0;overflow:visible}
+  .dlm path{fill:none;stroke:currentColor;stroke-width:1.25;
+            stroke-linecap:round;stroke-linejoin:round}
+  .peq .brace{width:.78em;color:var(--dim)}
+  .grp{display:inline-flex;align-items:stretch;vertical-align:middle}
+  .grp>.dlm{width:.4em;color:#9fb0c6}
+  .grp>.gb{display:inline-block;padding:0 .12em}
+  .rt{display:inline-flex;align-items:stretch;vertical-align:middle}
+  .rt>.dlm{width:.6em}
+  .rt>.rb{border-top:1.2px solid currentColor;padding:.14em .22em 0 .08em}
+  /* дробь: середина этажерки садится на математическую ось (vertical-align:middle) */
+  .frac{display:inline-flex;flex-direction:column;align-items:center;
+        vertical-align:middle;font-size:.92em;margin:0 .16em}
+  .frac>span{padding:0 .3em;line-height:1.25}
+  .frac>.fnum{border-bottom:1px solid currentColor}
+  /* кнопка «применить» внутри поля, у правого края последней строки */
+  #apply{position:absolute;right:5px;bottom:5px;z-index:2;
+         width:30px;height:26px;padding:0;display:flex;align-items:center;
+         justify-content:center;border-radius:6px}
+  #apply svg{display:block;width:17px;height:17px}
+  /* активна — подсвечена, как «отправить» в мессенджере: единственное место,
+     где видно, что написанное ещё не применено */
+  #apply:not(:disabled){background:#12384a;border-color:var(--accent);color:var(--accent)}
+  #apply:not(:disabled):hover{background:#17506b;color:#fff}
+  button:disabled{opacity:.42;cursor:default}
+  button:disabled:hover{border-color:var(--line);color:var(--txt)}
+  #msg{display:none;font-size:11px;line-height:1.4;margin-top:4px;padding-left:2px}
+  #msg.on{display:block}
+  #err{color:var(--bad)}
+  #warn{color:var(--accent2)}
+
+  @media (max-width:900px){
+    header{align-items:stretch}
+    header .lg{display:none}
+    #presetbox{order:-1;width:100%;flex:1 0 100%}   /* на узком экране селект сверху */
+  }
+
+  button,select,input[type=number],input[type=text]{
+    background:var(--panel2);border:1px solid var(--line);color:var(--txt);
+    border-radius:6px;padding:5px 9px;font:inherit}
+  /* touch-action:manipulation — на телефоне частые тычки в «шаг» иначе читаются
+     как double-tap и браузер зумит страницу; user-select — чтобы вместо нажатия
+     не выделялась подпись кнопки */
+  button{cursor:pointer;transition:.12s;touch-action:manipulation;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+  button:hover{border-color:var(--accent);color:#fff}
+  button.on{background:#12384a;border-color:var(--accent);color:#fff}
+  select{padding:5px 6px}
+  input[type=number]{width:74px}
+  input[type=range]{width:100%;accent-color:var(--accent);height:18px}
+
+  main{flex:1;display:flex;min-height:0}
+  #plots{flex:1;display:flex;flex-direction:column;min-width:0;padding:10px;gap:8px}
+  .cwrap{position:relative;border:1px solid var(--line);border-radius:8px;
+         background:var(--panel2);overflow:hidden}
+  #pw{flex:1;min-height:180px}
+  #xw{height:34%;min-height:110px;flex:none}
+  canvas{display:block;width:100%;height:100%}
+  #plot{cursor:crosshair;touch-action:none}
+  .tag{position:absolute;top:6px;right:9px;font-size:11px;color:var(--dim);
+       pointer-events:none;letter-spacing:.4px}
+  #hint{position:absolute;top:6px;left:9px;font-size:11px;color:var(--dim);pointer-events:none}
+
+  /* легенда — поверх графика, а не отдельным островом панели: показания поля
+     стоят у той кривой, к которой относятся. Полупрозрачная, чтобы не вырезать
+     кусок поля зрения; на графике справа сверху, где раньше висел тег «u(x, t)» */
+  #legend{position:absolute;top:6px;right:8px;z-index:2;
+          display:flex;flex-direction:column;gap:2px;padding:4px 5px;
+          background:rgba(10,14,21,.6);border:1px solid var(--line);border-radius:8px;
+          backdrop-filter:blur(3px)}
+  .lgd{display:flex;align-items:center;gap:8px;padding:2px 6px;border-radius:5px;
+       cursor:pointer;user-select:none;
+       font:12px/1.35 "Cascadia Mono",Consolas,monospace}
+  .lgd:hover{background:rgba(90,209,255,.08)}
+  /* выбранное поле — то, по которому рисует мышь; полоска слева его же цветом */
+  .lgd.sel{background:rgba(90,209,255,.12);box-shadow:inset 2px 0 0 currentColor}
+  .lgd .dot{width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  .lgd .dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px currentColor;opacity:.5}
+  /* комплексное поле: колечко фазы — оно же расшифровка цвета кривой на графике */
+  .lgd .dot.ph{width:11px;height:11px;background:
+    conic-gradient(hsl(0 85% 62%),hsl(60 85% 62%),hsl(120 85% 62%),hsl(180 85% 62%),
+                   hsl(240 85% 62%),hsl(300 85% 62%),hsl(360 85% 62%))}
+  .lgd .dot.ph.off{opacity:.35;box-shadow:none}
+  .lgd .nm{color:var(--txt);min-width:2.1em}
+  .lgd.off .nm{opacity:.45}
+  .lgd .v{margin-left:auto;color:var(--dim);white-space:nowrap}
+
+  aside{width:288px;flex:none;background:var(--panel);border-left:1px solid var(--line);
+        overflow-y:auto;padding:10px 12px 40px}
+  aside::-webkit-scrollbar{width:8px}
+  aside::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
+  /* разделы панели — острова: каждая группа настроек в своей карточке */
+  .isl{background:var(--isl);border:1px solid var(--line);border-radius:10px;
+       padding:9px 11px 11px;margin-bottom:9px;box-shadow:0 2px 8px rgba(0,0,0,.28)}
+  h3{margin:0 0 8px;font-size:11px;text-transform:uppercase;letter-spacing:1.2px;
+     color:var(--dim);font-weight:600;border-bottom:1px solid var(--line);padding-bottom:6px}
+  /* свёрнутые разделы: внутренности численного метода и справка не должны мозолить
+     глаз, но и прятаться совсем не должны — треугольник виден всегда, разворот
+     одним кликом. Родной маркер `<summary>` убран: он рисуется слева и ломает
+     единый вид заголовков-островов. */
+  summary{cursor:pointer;user-select:none;list-style:none}
+  summary::-webkit-details-marker{display:none}
+  summary h3{margin:0}
+  details[open]>summary h3{margin-bottom:8px}
+  summary h3::after,.fine>summary::after{content:"▸";float:right;color:var(--dim)}
+  details[open]>summary h3::after,.fine[open]>summary::after{content:"▾"}
+  .fine{margin-top:9px}
+  .fine>summary{color:var(--dim);font-size:11px;text-transform:uppercase;
+                letter-spacing:1.2px;font-weight:600;
+                border-top:1px solid var(--line);padding-top:8px}
+  .fine[open]>summary{margin-bottom:4px}
+  .row{display:flex;align-items:center;gap:6px;margin:6px 0;flex-wrap:wrap}
+  .row>label{color:var(--dim);min-width:78px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px}
+  .seg{display:flex;gap:3px;flex:1}
+  .seg button{flex:1;padding:3px 0;font-size:12px;min-width:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .chk{display:flex;align-items:center;gap:7px;margin:5px 0;cursor:pointer;user-select:none}
+  .chk input{accent-color:var(--accent);width:15px;height:15px}
+  .par{margin:8px 0}
+  .par .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px;gap:5px}
+  .par .top label{color:var(--accent2);font-family:"Cascadia Mono",Consolas,monospace;flex:1}
+  .par .top button{padding:2px 7px;font-size:12px}
+  .par .sc{color:var(--dim);font-size:10px;display:flex;justify-content:space-between}
+  /* пульт: размер иконки задаём мы, а не шрифт (см. ICON в src/ui/icons.ts) */
+  #padbtns svg{display:block;width:18px;height:18px;margin:0 auto}
+  .note{color:var(--dim);font-size:11px;line-height:1.5;margin-top:6px}
+  kbd{background:var(--panel2);border:1px solid var(--line);border-bottom-width:2px;
+      border-radius:4px;padding:0 4px;font-size:11px;font-family:inherit}
+
+  /* кнопки начальных данных — миниатюры профиля; сценарии — такие же кнопки,
+     но их картинка ещё и подписана */
+  #tools,#scen{display:grid;gap:5px}
+  #tools{grid-template-columns:repeat(4,1fr)}
+  #scen{grid-template-columns:repeat(3,1fr)}
+  /* НЕ flex и НЕ height:100% у svg: миниатюра — единственная начинка кнопки, и её
+     высоту обязан задавать сам viewBox. Проценты от флекс-элемента часть браузеров
+     (мобильный Safari) считает от нуля, и на телефоне вместо профилей оставались
+     пустые рамки. width:100% + height:auto работает везде: высота берётся из
+     пропорций viewBox, кнопка растёт под неё. */
+  #tools button,#scen button{display:block;padding:4px 3px;color:var(--dim)}
+  #tools button:hover,#scen button:hover{color:var(--txt)}
+  #tools button.on,#scen button.on{background:#12384a;border-color:var(--accent);color:var(--accent)}
+  #tools svg,#scen svg{display:block;width:100%;height:auto}
+  #tools svg .zero,#scen svg .zero{stroke:currentColor;opacity:.25;stroke-width:1;stroke-dasharray:2 3}
+  #tools svg .sh,#scen svg .sh{fill:none;stroke:currentColor;stroke-width:2;
+                 stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+  /* «станет таким» — тем же цветом, но пунктиром и бледнее: это не вторая кривая,
+     а будущее первой; стрелка направления — тоньше кривой, чтобы не спорить с ней */
+  #scen svg .gh{fill:none;stroke:currentColor;stroke-width:1.4;opacity:.4;
+                stroke-dasharray:3 2.5;vector-effect:non-scaling-stroke}
+  #scen svg .ar{fill:none;stroke:currentColor;stroke-width:1.4;opacity:.75;
+                stroke-linejoin:round;stroke-linecap:round;vector-effect:non-scaling-stroke}
+  #scen button span{display:block;font-size:11px;line-height:1.2;margin-top:2px}
+
+  /* всплывающая подсказка */
+  #tip{position:fixed;z-index:50;left:0;top:0;max-width:230px;padding:7px 10px;
+       background:#16202f;border:1px solid #2b3d57;border-radius:8px;
+       box-shadow:0 8px 24px rgba(0,0,0,.55);pointer-events:none;
+       opacity:0;transform:translateY(4px);transition:opacity .13s,transform .13s;
+       font-size:12px;line-height:1.45}
+  #tip.on{opacity:1;transform:translateY(0)}
+  #tip b{display:block;color:var(--accent);font-weight:600;margin-bottom:2px}
+  #tip i{color:var(--dim);font-style:normal}
+  #tip::after{content:"";position:absolute;width:8px;height:8px;background:#16202f;
+              border-right:1px solid #2b3d57;border-bottom:1px solid #2b3d57;
+              left:var(--ax,50%);margin-left:-4px}
+  #tip.up::after{bottom:-5px;transform:rotate(45deg)}
+  #tip.dn::after{top:-5px;transform:rotate(-135deg)}
+  #tip.lf::after{left:auto;right:-5px;margin-left:0;top:var(--ay,50%);margin-top:-4px;
+                 transform:rotate(-45deg)}
+
+  /* ================= телефон =================
+     Кнопок и побочной информации много, а экрана нет, поэтому раскладка меняется
+     не масштабом, а составом: график занимает всё, восемь островов настроек уезжают
+     в шторку снизу, а наверху остаётся только то, без чего нельзя ни секунды —
+     пульт (пуск/шаг/сброс), время и кнопка шторки. Эти три части и есть #bar.
+     На десктопе всего этого нет вовсе. */
+  /* NB: имя не `.sh` — этот класс уже занят кривой в миниатюрах инструментов
+     (`toolIcon`), и общее правило `display:none` погасило бы все семь профилей */
+  #scrim,#sheeth{display:none}
+
+  /* ================= нижняя строка =================
+     Общая для всех экранов, а не телефонная: пульт и показания счёта не относятся
+     ни к одной группе настроек и нужны всегда, поэтому живут отдельно от панели.
+     Слева — чем управляют (пуск, шаг, сброс, скорость), справа — что получается
+     (время, Δ за шаг, темп счёта, тревоги). На телефоне сюда же приезжает кнопка
+     шторки, а скорость, наоборот, уезжает в шторку — места в строке нет. */
+  :root{--barh:32px}
+  #bar{display:flex;align-items:center;gap:14px;flex:none;z-index:90;
+       padding:5px 10px;background:var(--panel);border-top:1px solid var(--line)}
+  #padbtns{display:flex;gap:5px;flex:none}
+  #bar button{height:var(--barh)}
+  #padbtns button{width:44px;padding:0}
+  #barspd{flex:none}
+  #barspd .row{margin:0;flex-wrap:nowrap}
+  #barspd .row>label{min-width:0}
+  #barspd .seg{flex:none}
+  #barspd .seg button{padding:0 9px}
+  /* показания счёта: подписи приглушены, числа обычным цветом — строку читают
+     по числам, а подписи нужны только чтобы понять, какое из них какое */
+  #bart{flex:none;min-width:0;color:var(--dim);
+        font:12px/1.25 "Cascadia Mono",Consolas,monospace;
+        white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #bart .q{color:var(--txt)}
+  #barmsg{flex:1;min-width:0;font-size:12px;
+          white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #gear{display:none}
+
+  /* Порог телефона повторён в src/ui/state.ts (`MOB`) — стили и переезд пульта обязаны
+     переключаться на одном и том же месте, иначе пульт окажется в двух местах
+     сразу. Второе условие — телефон лёжа: там мало не ширины, а высоты, и боковая
+     панель в 288px оставляет графику полосу в полтора сантиметра. */
+  @media (max-width:760px), (max-height:480px) and (max-width:1000px){
+    :root{--barh:50px}
+
+    header{padding:6px 8px;gap:6px}
+    /* строка 1: список задач, строка 2: поле с кнопкой внутри, строка 3: ошибки
+       (её нет, пока всё в порядке) */
+    #presetbox{width:100%;flex:1 0 100%;min-width:0;order:-1}
+    #presetbtn{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+    #eqbox{flex:1 0 100%;min-width:0}
+    /* кегль меньше 16px iOS считает поводом зазумить страницу на фокусе, и обратно
+       она уже не отъезжает — поэтому поле ввода на телефоне крупнее, а не мельче */
+    #eq,#eqhl{font-size:16px}
+    #eq{max-height:32vh}
+    #apply{width:34px;height:30px}          /* пальцем целиться труднее, чем мышью */
+    #apply svg{width:19px;height:19px}
+
+    #plots{padding:6px;gap:6px}
+    #pw{min-height:120px}
+    #xw{height:26%;min-height:76px}
+    #hint{font-size:10px;line-height:1.3;max-width:62%}
+    /* превью формулы на телефоне не показывается (см. markHi) — места справа от
+       списка нет; после выбора формула и так видна в поле ввода */
+
+    /* шторка настроек: та же <aside>, но выдвижная и над графиком */
+    aside{position:fixed;z-index:80;left:0;right:0;width:auto;
+          bottom:calc(var(--barh) + env(safe-area-inset-bottom,0px));
+          /* не во весь экран: ползунок параметра крутят, глядя на кривую,
+             поэтому над шторкой обязана оставаться полоса графика */
+          max-height:64vh;max-height:64dvh;padding:0 10px 14px;
+          border-left:none;border-top:1px solid var(--line);
+          border-radius:14px 14px 0 0;box-shadow:0 -14px 40px rgba(0,0,0,.55);
+          transform:translateY(calc(100% + var(--barh) + 40px));
+          transition:transform .22s ease;overscroll-behavior:contain}
+    aside.open{transform:none}
+    #sheeth{display:flex;align-items:center;gap:8px;position:sticky;top:0;z-index:3;
+            margin:0 -10px 8px;padding:13px 12px 8px;background:var(--panel);
+            border-bottom:1px solid var(--line)}
+    #sheeth .grab{position:absolute;left:50%;top:5px;width:34px;height:4px;margin-left:-17px;
+                  border-radius:2px;background:#2b3d57}
+    #sheeth b{font-weight:600;font-size:11px;letter-spacing:1.2px;
+              text-transform:uppercase;color:var(--dim)}
+    #sheeth button{margin-left:auto;padding:3px 11px}
+    #scrim{display:block;position:fixed;inset:0;z-index:70;background:rgba(4,7,12,.55);
+           opacity:0;pointer-events:none;transition:opacity .22s}
+    #scrim.on{opacity:1;pointer-events:auto}
+
+    /* нижняя строка: та же, но крупнее под палец, с кнопкой шторки и без скорости —
+       шесть кнопок «×N» в строку не помещаются, они уезжают в шторку (relayout) */
+    #bar{gap:7px;padding:5px 8px calc(5px + env(safe-area-inset-bottom,0px))}
+    #padbtns{gap:6px}
+    #padbtns button{width:50px}
+    #padbtns svg{width:24px;height:24px}
+    #barspd{display:none}
+    /* строка одна и узкая: показания и тревога делить её не могут, поэтому
+       тревога вытесняет числа прямо в #bart (см. updateDiag) */
+    #bart{flex:1;text-align:center}
+    #barmsg{display:none}
+    #gear{display:block;flex:none;padding:0 14px;font-size:16px}
+
+    /* пальцем целятся хуже, чем мышью: всё, во что надо попасть, крупнее */
+    aside button{min-height:34px}
+    aside .seg button{padding:6px 0}
+    aside input[type=number]{width:88px;padding:7px 9px}
+    aside select{padding:7px 6px}
+    aside input[type=range]{height:28px}
+    #tools button,#scen button{padding:6px 4px}   /* высоту задаёт сама миниатюра */
+    .chk{margin:9px 0}
+    .chk input{width:18px;height:18px}
+    .par .top button{padding:4px 9px}
+    /* `.chip` здесь когда-то раздувала кнопки-таблетки под палец, а достался этот
+       padding значкам-фишкам (`svg.chip`): при box-sizing:border-box 11px по бокам
+       съедали все 14px ширины, и на телефоне от фишек оставалась пустота. Тот же
+       случай, что с `.sh` ниже — общее имя класса в телефонном медиазапросе.
+       Значки на телефоне крупнее, но за счёт самого значка, а не отступов */
+    .pitem svg.chip{width:17px;height:17px}
+    .fx{gap:7px}
+    /* по фишке под кнопкой на телефоне не наводят, а держат палец (долгое нажатие
+       показывает подсказку) — попасть надо пальцем, отсюда крупнее */
+    .fxc{padding:5px}
+    .fxc svg.chip{width:19px;height:19px}
+
+    /* превью формулы: справа от списка места нет, поэтому внизу во всю ширину,
+       с кнопкой выбора. pointer-events нужны — по нему теперь нажимают */
+    #eqprev.phone{left:8px;right:8px;top:auto;bottom:calc(var(--barh,50px) + 10px);
+                  max-width:none;max-height:52vh;overflow:auto;pointer-events:auto}
+    /* «выбрать» — единственный способ применить пресет с телефона, поэтому кнопка
+       не уезжает вместе с текстом: у длинной расшифровки фишек превью прокручивается
+       внутри себя, и кнопка оставалась на дне, куда ещё надо доскроллить. Тень
+       того же цвета закрывает полосу нижнего отступа, по которой иначе ползёт текст */
+    #eqprev .pick{position:sticky;bottom:0;display:block;width:100%;margin-top:11px;
+                  padding:9px;background:#12384a;border-color:var(--accent);color:#fff;
+                  box-shadow:0 11px 0 #16202f}
+
+    #tip{max-width:min(280px,86vw)}
+  }
+
+  /* телефон лёжа: тесно по высоте, поэтому подсказка на графике убирается,
+     а диаграмма x–t ужимается — но не пропадает, ради неё половину задач и смотрят */
+  @media (max-height:480px) and (max-width:1000px){
+    /* лёжа ширины хватает, чтобы собрать шапку в одну строку: список и поле рядом.
+       Каждая сэкономленная строка шапки — это +35px графику */
+    #presetbox{width:auto;flex:1 1 170px}
+    #eqbox{flex:2 1 230px}
+    #hint{display:none}
+    /* лёжа дорога каждая строка шапки: фишки убираются, расшифровка остаётся
+       в превью формулы */
+    #fxbar{display:none}
+    #xw{height:30%;min-height:52px}
+    #eq{max-height:22vh}
+    aside{max-height:78vh;max-height:78dvh}
+  }

@@ -12,26 +12,12 @@ node -v                             # v24.18.1,  npm 11.16.0
 ```
 
 ```powershell
-# PowerShell: ~/.bashrc не при чём, активировать руками
-& "$env:USERPROFILE\.local\share\fnm\fnm.exe" env --shell powershell | Out-String | Invoke-Expression
+# PowerShell: проще всего подставить алиас fnm напрямую (так делает и tests/run.ps1)
+$env:PATH = "$env:APPDATA\fnm\aliases\default;$env:PATH"
 ```
 
 `C:\Program Files\nodejs\` в `PATH` из PowerShell есть, но это мёртвые хвосты —
 `node.exe` там нет, работает только fnm-версия.
-
-**Ядро под node запускается как есть.** `core.js` не трогает DOM и вешает экспорт
-на `window`, поэтому хватает однострочного шима:
-
-```bash
-node -e "global.window={}; require('./core.js'); const {Sim,buildSystem}=window.DifurCore; …"
-```
-
-Проверено: весь файл `tests/core-tests.html` прогоняется под node,
-если подсунуть `global.window=global`, заглушку `document.getElementById` и
-скормить `eval` тело второго `<script>`. Даёт 0 FAIL, те же числа, что в браузере.
-
-Интерфейс так не проверить — там нужен настоящий DOM, canvas и события мыши,
-поэтому `tests/run.ps1` остаётся на headless Edge.
 
 **Python есть, но голый** — 3.10.11 из WindowsApps, `numpy` не стоит. Для
 контрольных расчётов проще ядро под node, чем ставить пакеты.
@@ -39,42 +25,58 @@ node -e "global.window={}; require('./core.js'); const {Sim,buildSystem}=window.
 ## Полный прогон
 
 ```powershell
-powershell -File tests\run.ps1     # всё: ядро + интерфейс + телефон (~41 с)
+powershell -File tests\run.ps1     # всё: ядро + интерфейс + телефон
 ```
 
-Скрипт печатает `PASS`/`FAIL` построчно. Внутри он:
-1. открывает `tests/core-tests.html` через `--dump-dom` и вынимает `<pre id="out">`;
-2. собирает временный `_ui-test.html` = `index.html` + перехватчик `window.onerror`
-   + `tests/ui-driver.js`, гоняет его в окне 1400x900 и вынимает `<pre id="smoke">`;
-3. то же самое с `tests/ui-mobile.js` (`_ui-mobile.html`, `<pre id="mobile">`), но в
-   окне 420x860 — телефонная раскладка. Временные страницы удаляются в `finally`.
+Скрипт сам подхватывает node через fnm и ставит node_modules, если их нет. Внутри:
+1. **ядро** — `npx vitest run`: [tests/core/core.test.ts](../tests/core/core.test.ts),
+   92 проверки, работают прямо по `src/core/*.ts` под node, без браузера;
+2. **тестовые страницы** — `node tests/make-pages.mjs` собирает `tests/ui.html` и
+   `tests/mobile.html` из корневого `index.html` (+ перехват `window.onerror` в
+   `<head>` и драйвер module-скриптом в конце `<body>`; module-скрипты выполняются
+   в порядке документа, поэтому драйвер стартует после `src/main.ts`), затем
+   `npx vite build --mode test` кладёт их в `dist-test/`;
+3. **интерфейс и телефон** — ES-модули не живут на `file://`, поэтому `dist-test`
+   раздаёт крошечный сервер `tests/serve.mjs`, а headless Edge получает
+   `http://127.0.0.1:47173/tests/ui.html` в окне 1400x900 (`<pre id="smoke">`,
+   `tests/ui-driver.js`, 231 проверка) и `.../tests/mobile.html` в 420x860
+   (`<pre id="mobile">`, `tests/ui-mobile.js`, 30 проверок).
 
-**Третий прогон — отдельным окном, а не `resize` внутри страницы**: медиазапросы и
-вёрстка должны отработать с загрузки, как у человека, открывшего сайт с телефона.
+Итог печатается строкой `=== ИТОГО UI: PASS=… FAIL=… ===`, exit-код ненулевой при
+любом FAIL — на этом можно строить CI и автоматику, глазами считать не надо.
+
+**Телефонный прогон — отдельным окном, а не `resize` внутри страницы**: медиазапросы
+и вёрстка должны отработать с загрузки, как у человека, открывшего сайт с телефона.
 Поводом стала жалоба, которую широкое окно поймать не могло в принципе: правило
 `.chip{padding:…}` из телефонного медиазапроса схлопывало значки фишек, и на
 телефоне их не было вовсе (см. [ui.md](ui.md#телефон)). Проверять там имеет смысл
 только телефонное: что панель стала шторкой, что тап по пункту списка не выбирает
 пресет, что список не налезает на превью.
 
-Весь прогон — **322 строки `PASS`** (ядро 80, интерфейс 215, телефон 27). Если их
+Весь прогон — **353 проверки** (ядро 92 + интерфейс 231 + телефон 30). Если их
 стало заметно меньше, тесты не «починились», а перестали выполняться: проверь, что
-не выпал целый IIFE или шаг драйвера (исключение внутри шага печатается одной
+не выпал целый блок или шаг драйвера (исключение внутри шага печатается одной
 строкой `FAIL исключение…`).
 
-Проверки ядра можно просто открыть в браузере: `tests/core-tests.html` — это
-самостоятельная страница со списком PASS/FAIL. Один тест запускается только
-правкой файла (закомментировать соседние IIFE); фреймворка нет и не нужно.
+Один тест ядра гоняется как обычно в vitest: `npx vitest run -t 'солитон НУШ'`.
+
+**CSS минифицируется esbuild-ом, а не штатным минификатором Vite** (`cssMinify:
+'esbuild'` в vite.config.ts): штатный переписывал `(max-width:760px)` в
+range-синтаксис `(width<=760px)`, и проверка «порог телефона в CSS и в JS совпадает»
+переставала находить медиазапрос в CSSOM.
 
 ## Ручной прогон и скриншот
 
+Приложение — ES-модули, `file://` больше не работает: для глаз — `npm run dev`
+(hot reload), для скриншотов headless-ом — сборка и тот же сервер:
+
 ```powershell
+npm run build
+Start-Process node -ArgumentList 'tests/serve.mjs','dist','4173' -WindowStyle Hidden
 $e = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-& $e --headless=new --disable-gpu --no-sandbox --virtual-time-budget=120000 `
-     --user-data-dir="$env:TEMP\difur-prof" --dump-dom "file:///c:/Users/ils/src/difur/index.html"
 & $e --headless=new --disable-gpu --no-sandbox --window-size=1400,880 `
      --virtual-time-budget=90000 --user-data-dir="$env:TEMP\difur-prof" `
-     --screenshot="$env:TEMP\shot.png" "file:///c:/Users/ils/src/difur/index.html"
+     --screenshot="$env:TEMP\shot.png" "http://127.0.0.1:4173/"
 ```
 
 ## Как посмотреть телефонную раскладку
@@ -88,15 +90,16 @@ $e = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 влияет вовсе (проверено: `=1` и `=2` дают тот же `innerWidth`).
 
 Поэтому узкие экраны смотрятся **через iframe** — у него свой viewport, и медиазапросы
-считаются по нему. Временная страница-стенд (в scratchpad, не в репозитории):
+считаются по нему. Временная страница-стенд (в scratchpad, не в репозитории;
+приложение берётся с локального сервера, см. выше):
 
 ```html
-<iframe src="file:///c:/Users/ils/src/difur/index.html" width="390" height="844"></iframe>
-<iframe src="file:///c:/Users/ils/src/difur/index.html" width="844" height="390"></iframe>
+<iframe src="http://127.0.0.1:4173/" width="390" height="844"></iframe>
+<iframe src="http://127.0.0.1:4173/" width="844" height="390"></iframe>
 ```
 
-и скриншот обычным `--window-size=1290,900` (нужен `--allow-file-access-from-files`).
-Открытую шторку снимать так: `index.html` + `<script>` с `getElementById('gear').click()`
+и скриншот обычным `--window-size=1290,900`.
+Открытую шторку снимать так: страница + `<script>` с `getElementById('gear').click()`
 и **обязательно** `<style>aside,#scrim{transition:none!important}</style>` — под
 `--virtual-time-budget` CSS-переходы не доигрываются, и без этого в кадр попадает
 шторка, застрявшая на полпути (выглядит как «шторка слишком низкая»).
@@ -106,8 +109,8 @@ $e = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 ширины окна Windows, но порог телефона — 760px, так что медиазапрос включается и
 проверять там можно всё, кроме собственно ширины макета: узкий макет по-прежнему
 смотрится глазами через iframe. Основной прогон (`ui-driver.js`) остаётся в
-1400x900 и проверяет, что десктоп цел и что порог телефона в CSS и в `app.js`
-совпадает.
+1400x900 и проверяет, что десктоп цел и что порог телефона в CSS и в
+`src/ui/state.ts` (`MOB`) совпадает.
 
 ## Численный эксперимент
 
@@ -117,15 +120,16 @@ $e = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 и [docs/decisions.md](decisions.md); если правишь решатель, дешевле повторить
 эксперимент, чем спорить с таблицей.
 
-Два способа, оба рабочие:
-- **node** — просто скрипт с `global.window={}` и `require('./core.js')`, ничего
-  временного в репозитории не появляется. Предпочтительный;
-- **`_lab.html`** — временный файл в корне (`<script src="core.js">`, голый цикл по
-  конфигурациям, результат в `<pre id="out">`), прогон тем же `--dump-dom`.
-  Исторический способ, им получены все таблицы в документации.
+Лаборатория — TS/JS-скрипт, который импортирует ядро напрямую и запускается
+`vite-node` (стоит вместе с vitest):
 
-Временные страницы (`shot.html` = `index.html` + драйвер, `_lab.html` для расчётов)
-удалять сразу после использования — в репозитории их быть не должно.
+```powershell
+npx vite-node лаборатория.ts     # внутри: import { Sim, buildSystem } from './src/core'
+```
+
+Скрипт временный: в репозитории ему делать нечего, удалять сразу после
+использования (исторические `_lab.html` со `<script src="core.js">` больше не
+работают — ядро стало модульным).
 
 ## Грабли окружения (все проверены на практике)
 
