@@ -113,7 +113,9 @@ export function initPresetList() {
       markHi(); itemAt(hiIdx)!.scrollIntoView({ block:'nearest' });
       return;
     }
-    if (isOpen() && (e.key === 'Enter' || e.code === 'Space')) {
+    /* Выбор — только Enter: пробел во всём окне отдан play/pause и до кнопки
+       списка не доходит (`controls.ts`), иначе он открывал бы список вместо паузы. */
+    if (isOpen() && e.key === 'Enter') {
       e.preventDefault();
       if (hiIdx >= 0) choose(hiIdx);
     }

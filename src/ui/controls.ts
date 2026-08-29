@@ -194,12 +194,29 @@ export function initControls() {
     if (b) setPad(+b.dataset.p!);
   });
 
+  /* Пробел — только play/pause, где бы ни стоял фокус. Поэтому ловится на
+     фазе перехвата и гасится целиком: без этого он то листает страницу, то «нажимает»
+     кнопку, на которой фокус после клика, и человек получает вместо паузы что угодно.
+     Кнопка срабатывает по keyup, поэтому гасить один keydown мало. Исключение
+     одно — поля, куда пробел вводится символом (текст уравнений). */
+  const typing = (t: HTMLElement) =>
+    !!t && (t.tagName === 'TEXTAREA' || t.isContentEditable ||
+      (t.tagName === 'INPUT' &&
+       /^(text|search|url|email|password|tel)$/.test((t as HTMLInputElement).type)));
+  const eatSpace = (e: KeyboardEvent) => {
+    if (e.code !== 'Space' && e.key !== ' ') return false;
+    if (e.ctrlKey || e.metaKey || e.altKey) return false;
+    if (typing(e.target as HTMLElement)) return false;
+    e.preventDefault(); e.stopPropagation();
+    return true;
+  };
+  // зажатый пробел не должен мигать счётом — автоповтор глотается без клика
+  window.addEventListener('keydown', e => { if (eatSpace(e) && !e.repeat) $('play').click(); }, true);
+  window.addEventListener('keyup', eatSpace, true);
+
   window.addEventListener('keydown', e => {
-    const t = e.target as HTMLElement;
-    const tag = t.tagName;
+    const tag = (e.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
-    if (t.id === 'presetbtn') return;   // на кнопке списка пробел открывает список
-    if (e.code === 'Space') { e.preventDefault(); $('play').click(); }
     if (e.key === 'r' || e.key === 'R' || e.key === 'к' || e.key === 'К') $('reset').click();
   });
 }

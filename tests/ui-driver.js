@@ -223,6 +223,39 @@ steps.push(() => {
   ck('сброс вернул t=0', D.sim.t === 0, 't=' + D.sim.t);
 });
 
+/* --- пробел: только play/pause ---
+   Синтетическое событие само по себе кнопку не нажмёт и страницу не пролистает,
+   поэтому проверяется то, чем и то и другое гасится: defaultPrevented. Фокус при
+   этом ставится на кнопки и ползунки — там пробел и уводил не туда. */
+steps.push(() => {
+  const space = el => {
+    const e = new KeyboardEvent('keydown',
+      { key:' ', code:'Space', bubbles:true, cancelable:true });
+    el.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  D.S.running = false;
+  const eaten = ['reset', 'plot', 'presetbtn'].filter(id => { $(id).focus(); return !space($(id)); });
+  ck('пробел перехвачен и на кнопках, и на графике', eaten.length === 0, eaten.join(','));
+  ck('пробел с кнопки запускает счёт', D.S.running);
+  $('play').focus();
+  space($('play'));
+  ck('второй пробел останавливает', !D.S.running);
+
+  const btn = $('presetbtn'), list = $('plist');
+  btn.focus(); space(btn);
+  ck('пробел на кнопке списка список не открывает', !list.classList.contains('on'));
+  ck('он же переключил счёт', D.S.running);
+  $('play').click();
+
+  const eq = $('eq'), was = eq.value;
+  eq.focus();
+  ck('в поле уравнений пробел остаётся пробелом', !space(eq) && !D.S.running,
+     'running=' + D.S.running);
+  ck('текст уравнения не тронут', eq.value === was);
+  eq.blur();
+});
+
 steps.push(() => {
   const eq = $('eq'), type = t => { eq.value = t; eq.dispatchEvent(new Event('input')); };
   type('ut = uxx');
