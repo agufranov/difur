@@ -58,20 +58,23 @@ export function spark(pt: (s: number) => [number, number], n: number): string {
   return d;
 }
 
-/* Та же угловая шкала, что у комплексной кривой: сектор показывает цвет фазы
-   в своём направлении. SVG не умеет конический градиент, поэтому круг набран
-   узкими секторами; на размере фишки они зрительно сливаются. */
+/* Та же угловая шкала, что у комплексной кривой: цвет по направлению — arg = 0
+   красный, дальше против часовой стрелки. Круг раньше набирался 24 секторами
+   (нативного конического градиента у SVG нет) — на экране это читалось радугой:
+   грани между секторами видны даже на 14 пикселях. Честный градиент есть у CSS,
+   и он доезжает до SVG через `<foreignObject>`; заодно это та же заливка, что у
+   колечка фазы в легенде. Оттенки перечислены по убыванию и от `90deg`, потому
+   что конический градиент идёт по часовой стрелке от севера, а arg растёт против
+   часовой от востока. Шаг 30° взят не для гладкости (её даёт сам градиент), а
+   потому что между соседними опорными цветами интерполяция идёт по sRGB, а не по
+   тону: на длинных дугах она уводила бы цвет мимо шкалы. */
 function phaseWheel(): string {
-  const n = 24, r = 5.2, out: string[] = [];
-  for (let j = 0; j < n; j++) {
-    const a0 = 2*Math.PI*j/n, a1 = 2*Math.PI*(j + 1)/n;
-    const x0 = 7 + r*Math.cos(a0), y0 = 7 - r*Math.sin(a0);
-    const x1 = 7 + r*Math.cos(a1), y1 = 7 - r*Math.sin(a1);
-    out.push('<path style="fill:hsl(' + (360*j/n) + ' 85% 55%);stroke:none" d="M7 7 L' +
-      x0.toFixed(2) + ' ' + y0.toFixed(2) + ' A' + r + ' ' + r + ' 0 0 0 ' +
-      x1.toFixed(2) + ' ' + y1.toFixed(2) + ' Z"/>');
-  }
-  return '<g class="phase-wheel">' + out.join('') + '</g>';
+  const stops: string[] = [];
+  for (let h = 360; h >= 0; h -= 30) stops.push('hsl(' + h + ' 85% 55%)');
+  return '<foreignObject x="1" y="1" width="12" height="12">' +
+    '<div class="phase-wheel" style="width:100%;height:100%;border-radius:50%;' +
+    'background:conic-gradient(from 90deg,' + stops.join(',') + ')"></div>' +
+    '</foreignObject>';
 }
 
 export const CHIP_ART: Record<string, string> = {
@@ -85,7 +88,7 @@ export const CHIP_ART: Record<string, string> = {
   // и маятник — маятник рисовал пример, а не саму вторую производную
   utt:  '<text x="7" y="9.6" text-anchor="middle">u<tspan class="sb" dy="1.6">tt</tspan></text>',
   // фазор: длина и угол — это |ψ| и фаза, ровно то, что рисует цветная кривая
-  cx:   phaseWheel() + '<circle cx="7" cy="7" r="5.2"/><path d="M7 7 10.7 3.3"/>',
+  cx:   phaseWheel() + '<path d="M7 7 10.4 3.6"/>',
   // укрученный горб: вершина едет быстрее подошвы — так выглядит нелинейность
   nl:   '<path d="' + spark(s => { const t = s*1.5, g = Math.exp(-sq(t/0.6));
                                    return [(t + 0.7*g)/1.75, 1.5*g - 0.62]; }, 46) + '"/>',
