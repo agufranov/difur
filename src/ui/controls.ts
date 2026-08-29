@@ -208,6 +208,12 @@ export function initControls() {
     if (e.ctrlKey || e.metaKey || e.altKey) return false;
     if (typing(e.target as HTMLElement)) return false;
     e.preventDefault(); e.stopPropagation();
+    /* Снять фокус обязательно, иначе кнопка, на которой он остался после клика,
+       по первому же пробелу обводится браузерным `:focus-visible`: нажатие клавиши
+       переключает браузер в «клавиатурный режим», и ободок выглядит как нажатие
+       кнопки, хотя нажатия нет — само нажатие гасит preventDefault выше. */
+    const a = document.activeElement as HTMLElement | null;
+    if (a && a !== document.body) a.blur();
     return true;
   };
   // зажатый пробел не должен мигать счётом — автоповтор глотается без клика

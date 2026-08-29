@@ -238,6 +238,11 @@ steps.push(() => {
   const eaten = ['reset', 'plot', 'presetbtn'].filter(id => { $(id).focus(); return !space($(id)); });
   ck('пробел перехвачен и на кнопках, и на графике', eaten.length === 0, eaten.join(','));
   ck('пробел с кнопки запускает счёт', D.S.running);
+  /* Фокус снимается тут же: иначе браузер по первой клавише переходит в
+     «клавиатурный режим» и обводит кнопку под фокусом — со стороны неотличимо
+     от нажатия, из-за которого пробел и переделывали. */
+  ck('пробел снимает фокус с кнопки', document.activeElement !== $('presetbtn') &&
+     document.activeElement !== $('reset'), 'active=' + (document.activeElement||{}).id);
   $('play').focus();
   space($('play'));
   ck('второй пробел останавливает', !D.S.running);
