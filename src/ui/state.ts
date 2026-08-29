@@ -22,6 +22,8 @@ export const clamp = (v: number, a: number, b: number) => v < a ? a : v > b ? b 
 export const wrapd = (d: number, L: number) => d - L * Math.round(d / L);
 export const escHTML = (s: string) =>
   s.replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' } as Record<string, string>)[c]);
+/** то же для значения атрибута: кавычка внутри `data-tip` порвала бы разметку */
+export const escAttr = (s: string) => escHTML(s).replace(/"/g, '&quot;');
 
 /** перетаскивание мышью: перо — след точек, остальные инструменты — профиль */
 export type Drag =

@@ -50,16 +50,28 @@
   #eqhl .op{color:#6f8199}
   #eqhl .cm{color:var(--dim)}
 
-  /* список пресетов: кнопка + свой выпадающий список + превью формулы справа */
+  /* Список пресетов: кнопка + свой выпадающий список карточек. Карточка держит
+     три вещи по отдельности — имя, формулу и строку «что увидишь», — поэтому
+     список широкий и его пункты высокие: страница у него одна, листают его
+     несколько секунд в начале работы, а разбираться в мешанине «имя (пояснение)»
+     приходилось каждый раз заново. */
   #presetbox{position:relative;width:300px;flex:none}
   #presetbtn{width:100%;text-align:left;padding:7px 10px;display:flex;align-items:center}
   #presetbtn::after{content:"▾";margin-left:auto;padding-left:8px;color:var(--dim)}
   #presetbtn.open{border-color:var(--accent);color:#fff}
-  #plist{display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;width:100%;
-         max-height:min(62vh,440px);overflow-y:auto;padding:4px;background:var(--isl);
-         border:1px solid #2b3d57;border-radius:8px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
-  #plist.on{display:block}
-  /* Строка фишек под кнопкой: значки крупнее списочных — по ним целятся мышью
+  /* Шире кнопки: формула в карточке не должна ездить по горизонтали у каждого
+     второго пресета, а имя — обрываться многоточием. Колонок столько, сколько
+     влезет по 330px: карточка втрое выше прежней строки, и в одну колонку из
+     тридцати восьми задач на экран помещалось шесть — список приходилось
+     прокручивать целиком, чтобы вспомнить, что в нём есть. На телефоне та же
+     запись даёт одну колонку сама, без второго правила. */
+  #plist{display:none;position:absolute;z-index:60;top:calc(100% + 4px);left:0;
+         width:min(1000px,94vw);min-width:100%;
+         grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:3px;align-content:start;
+         max-height:min(78vh,700px);overflow-y:auto;padding:5px;background:var(--isl);
+         border:1px solid #2b3d57;border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.6)}
+  #plist.on{display:grid}
+  /* Строка фишек под кнопкой: значки крупнее карточных — по ним целятся мышью
      (и пальцем на телефоне), чтобы прочитать подсказку. Пустая строка убирается
      целиком: у «Переноса» фишек две, а у своего кривого уравнения ни одной, и
      висящий пустой отступ поднимал бы шапку зря. */
@@ -70,45 +82,43 @@
   .fxc svg.chip{width:16px;height:16px}
   #plist::-webkit-scrollbar{width:8px}
   #plist::-webkit-scrollbar-thumb{background:#22304a;border-radius:4px}
-  /* имя слева, значки-фишки прижаты к правому краю; ужимается при нехватке
-     места именно имя (multiline-ellipsis у флекса работает только с min-width:0) */
-  .pitem{display:flex;align-items:center;gap:8px;padding:5px 9px;border-radius:6px;cursor:pointer}
-  .pitem .nm{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .pitem.cur{color:var(--accent)}
-  .pitem.hi{background:#12384a;color:#fff}
 
-  /* фишки: значок один и тот же и в списке, и в расшифровке под формулой */
+  /* карточка: шапка (имя + значки), формула, строка объяснения */
+  .pitem{padding:8px 10px 9px;border:1px solid transparent;border-radius:8px;cursor:pointer}
+  .phead{display:flex;align-items:baseline;gap:9px}
+  /* имя переносится, а не обрывается: в карточке для него есть место, и это
+     единственное место, где имя видно целиком (на кнопке оно всё ещё ужимается) */
+  .pitem .nm{min-width:0;font-weight:600;line-height:1.25;color:var(--txt)}
+  /* формула шире карточки — редкость (Захаров, Кан–Хиллиард), но ездить она
+     обязана внутри своей строки, а не растягивать список */
+  .pitem .pform{margin-top:5px;overflow-x:auto;overflow-y:hidden}
+  .pitem .pform::-webkit-scrollbar{height:6px}
+  .pitem .pform::-webkit-scrollbar-thumb{background:#22304a;border-radius:3px}
+  .pitem .peq{width:max-content;font-size:14px;line-height:1.65}
+  .pitem .note{margin-top:5px;font-size:11.5px;line-height:1.45;color:var(--dim)}
+  .pitem.cur .nm{color:var(--accent)}
+  .pitem.hi{background:#12384a;border-color:#1e4a60}
+  .pitem.hi .nm{color:#fff}
+  .pitem.hi .note{color:#a9bdd4}
+
+  /* фишки: значок один и тот же и в карточке, и в строке под кнопкой */
   svg.chip{display:block;width:14px;height:14px;flex:none;
            fill:none;stroke:currentColor;stroke-width:1.3;
            stroke-linejoin:round;stroke-linecap:round}
   svg.chip .fl{fill:currentColor;stroke:none}
   svg.chip .dsh{stroke-dasharray:2.4 2}
-  /* буква в значке — тем же шрифтом, что формула в превью: значок «uₜₜ» и есть
-     кусок формулы, а не картинка про неё */
+  /* буква в значке — тем же шрифтом, что формула: значок «uₜₜ» и есть кусок
+     формулы, а не картинка про неё */
   svg.chip text{fill:currentColor;stroke:none;
                 font:italic 10px/1 Cambria,Georgia,"Times New Roman",serif}
   svg.chip text .sb{font-size:6.5px}
-  .fx{margin-left:auto;flex:none;display:flex;gap:5px;color:var(--dim)}
+  .fx{margin-left:auto;flex:none;display:flex;gap:3px;color:var(--dim)}
   .pitem.hi .fx{color:var(--accent)}
+  /* значок в шапке карточки — сам себе цель для мыши и пальца: под ним подсказка
+     с расшифровкой (data-tip), которая раньше жила в окошке-превью */
+  .fxi{display:block;padding:2px;border-radius:4px;cursor:help}
+  .fxi:hover{background:rgba(255,255,255,.08);color:var(--accent)}
 
-  #eqprev{position:fixed;z-index:70;visibility:hidden;opacity:0;transition:opacity .12s;
-          max-width:min(420px,42vw);padding:11px 15px;background:#16202f;
-          border:1px solid #2b3d57;border-radius:8px;box-shadow:0 12px 30px rgba(0,0,0,.6);
-          pointer-events:none;overflow-x:auto}
-  #eqprev.on{visibility:visible;opacity:1}
-  /* имя пресета над формулой: формула может ездить по горизонтали, а имя обязано
-     переноситься и читаться целиком — ради этого превью его и показывает */
-  #eqprev .ttl{margin-bottom:8px;max-width:100%;font-size:13px;font-weight:600;
-               line-height:1.3;color:var(--txt);white-space:normal}
-  /* расшифровка фишек под формулой. Формула может быть шире окошка и ездить по
-     горизонтали (overflow-x у #eqprev), а текст обязан переноситься — отсюда
-     явный white-space:normal и ширина по контейнеру */
-  #eqprev .fxwhy{margin-top:10px;padding-top:9px;border-top:1px solid #2b3d57;
-                 display:grid;gap:7px;max-width:100%;font-size:12px;line-height:1.45;
-                 color:var(--dim);white-space:normal}
-  #eqprev .fxwhy>div{display:flex;gap:7px;align-items:flex-start}
-  #eqprev .fxwhy svg.chip{margin-top:2px}
-  #eqprev .fxwhy b{color:var(--txt);font-weight:600}
   /* формула: боксы, как в TeX — дробь этажеркой, степень верхним индексом,
      скобки не глифом, а нарисованные под высоту содержимого (см. fitMath) */
   .peq{display:flex;align-items:stretch;gap:7px;
@@ -360,8 +370,14 @@
     #pw{min-height:120px}
     #xw{height:26%;min-height:76px}
     #hint{font-size:10px;line-height:1.3;max-width:62%}
-    /* превью формулы на телефоне не показывается (см. markHi) — места справа от
-       списка нет; после выбора формула и так видна в поле ввода */
+    /* список карточек занимает почти весь экран: формулу и объяснение видно
+       до выбора, поэтому выбор — один тап, без промежуточной кнопки */
+    /* колонок по-прежнему столько, сколько влезло: стоя это одна, а лёжа —
+       две, и лёжа это важнее всего, там на экран помещалось две карточки */
+    #plist{left:0;right:0;width:auto;max-height:72vh;max-height:72dvh;padding:4px}
+    .pitem{padding:9px 10px 10px}
+    .pitem .peq{font-size:15px}
+    .pitem .note{font-size:12px}
 
     /* шторка настроек: та же <aside>, но выдвижная и над графиком */
     aside{position:fixed;z-index:80;left:0;right:0;width:auto;
@@ -415,23 +431,14 @@
        случай, что с `.sh` ниже — общее имя класса в телефонном медиазапросе.
        Значки на телефоне крупнее, но за счёт самого значка, а не отступов */
     .pitem svg.chip{width:17px;height:17px}
-    .fx{gap:7px}
+    .fx{gap:3px}
+    /* по значку в карточке на телефоне не наводят, а держат палец — попасть надо
+       пальцем, и попасть мимо карточки нельзя: промах выберет пресет */
+    .fxi{padding:5px}
     /* по фишке под кнопкой на телефоне не наводят, а держат палец (долгое нажатие
        показывает подсказку) — попасть надо пальцем, отсюда крупнее */
     .fxc{padding:5px}
     .fxc svg.chip{width:19px;height:19px}
-
-    /* превью формулы: справа от списка места нет, поэтому внизу во всю ширину,
-       с кнопкой выбора. pointer-events нужны — по нему теперь нажимают */
-    #eqprev.phone{left:8px;right:8px;top:auto;bottom:calc(var(--barh,50px) + 10px);
-                  max-width:none;max-height:52vh;overflow:auto;pointer-events:auto}
-    /* «выбрать» — единственный способ применить пресет с телефона, поэтому кнопка
-       не уезжает вместе с текстом: у длинной расшифровки фишек превью прокручивается
-       внутри себя, и кнопка оставалась на дне, куда ещё надо доскроллить. Тень
-       того же цвета закрывает полосу нижнего отступа, по которой иначе ползёт текст */
-    #eqprev .pick{position:sticky;bottom:0;display:block;width:100%;margin-top:11px;
-                  padding:9px;background:#12384a;border-color:var(--accent);color:#fff;
-                  box-shadow:0 11px 0 #16202f}
 
     #tip{max-width:min(280px,86vw)}
   }
@@ -442,10 +449,15 @@
     /* лёжа ширины хватает, чтобы собрать шапку в одну строку: список и поле рядом.
        Каждая сэкономленная строка шапки — это +35px графику */
     #presetbox{width:auto;flex:1 1 170px}
+    /* ...а список от неё не зависит: лёжа сам блок ужимается до 170px, и список,
+       растянутый по нему (left:0;right:0), обрезал бы карточки по живому. Ширина
+       берётся от экрана — заодно встают две колонки, а лёжа это дороже всего:
+       по высоте помещается всего пара карточек */
+    #plist{right:auto;width:min(96vw,900px)}
     #eqbox{flex:2 1 230px}
     #hint{display:none}
-    /* лёжа дорога каждая строка шапки: фишки убираются, расшифровка остаётся
-       в превью формулы */
+    /* лёжа дорога каждая строка шапки: фишки под кнопкой убираются, а те пять,
+       что отличают задачи друг от друга, остаются в карточках списка */
     #fxbar{display:none}
     #xw{height:30%;min-height:52px}
     #eq{max-height:22vh}

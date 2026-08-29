@@ -1,14 +1,14 @@
 /* Проверки телефонной раскладки (запускается через tests/run.ps1 в узком окне).
    Основной сценарий (tests/ui-driver.js) идёт в окне 1400x900 и до телефонных
-   веток не достаёт, а логики там хватает: список пресетов ведёт себя иначе,
-   превью ложится вниз экрана, пульт переезжает. Каждая проверка здесь стоит за
-   уже случившейся жалобой. */
+   веток не достаёт, а логики там хватает: список карточек раскрывается во всю
+   ширину, пульт переезжает в шторку. Каждая проверка здесь стоит за уже
+   случившейся жалобой. */
 (function(){
 const R = [];
 const ck = (n, ok, i) => R.push((ok?'PASS  ':'FAIL  ') + n + (i!==undefined ? '   ['+i+']' : ''));
 const $ = id => document.getElementById(id);
 const D = window.__difur;
-const list = $('plist'), btn = $('presetbtn'), prev = $('eqprev');
+const list = $('plist'), btn = $('presetbtn');
 const at = re => D.PRESETS.findIndex(p => re.test(p.name));
 
 const steps = [];
@@ -36,7 +36,7 @@ steps.push(() => {
   const iKdV = at(/Кортевег/);
   const chips = [...list.children[iKdV].querySelectorAll('svg.chip')];
   // два, а не три: «дисперсия» — про механизм, она уехала в строку под кнопкой
-  ck('у КдФ в пункте два значка', chips.length === 2, chips.length);
+  ck('у КдФ в карточке два значка', chips.length === 2, chips.length);
   const small = chips.filter(c => c.getBoundingClientRect().width < 12 ||
                                   c.getBoundingClientRect().height < 12);
   ck('значки не схлопнуты отступами', small.length === 0,
@@ -61,57 +61,51 @@ steps.push(() => {
      bar.map(e => e.getAttribute('data-tip')).join(' / '));
 });
 
-/* --- тап по пункту показывает формулу и НЕ выбирает ---
-   Выбор на телефоне делает одна кнопка «выбрать»: раньше повторный тап по тому же
-   пункту применял пресет, и список закрывался под пальцем у того, кто листал. */
+/* --- карточка на телефоне: формулу и объяснение видно до выбора ---
+   Раньше тап по пункту только показывал превью внизу экрана, а применяла пресет
+   отдельная кнопка «выбрать»: формулу иначе негде было увидеть, и список с превью
+   делили экран, налезая друг на друга. Теперь формула лежит в самой карточке,
+   промежуточный шаг убран — тап выбирает. */
 steps.push(() => {
-  const was = $('preset').value, iSG = at(/отскок/);
-  list.children[iSG].click();
-  ck('тап показывает превью внизу экрана',
-     prev.classList.contains('on') && prev.classList.contains('phone'), prev.className);
-  ck('тап не закрывает список', list.classList.contains('on'));
-  ck('тап ничего не выбирает', $('preset').value === was, was + ' -> ' + $('preset').value);
-  list.children[iSG].click();          // второй тап по тому же пункту
-  ck('повторный тап тоже не выбирает',
-     list.classList.contains('on') && $('preset').value === was, $('preset').value);
-  ck('в превью есть кнопка «выбрать»', !!prev.querySelector('.pick'));
-  /* имя пресета читается в заголовке превью — на узком экране оно обязано
-     помещаться целиком, с переносом, а не уезжать вбок */
-  const ttl = prev.querySelector('.ttl');
-  ck('заголовок превью — полное имя пресета',
-     !!ttl && ttl.textContent === D.PRESETS[iSG].name, ttl ? ttl.textContent : 'нет заголовка');
-  ck('длинное имя не обрезано в заголовке', ttl.scrollWidth <= ttl.clientWidth + 1,
-     ttl.scrollWidth + ' vs ' + ttl.clientWidth);
+  const iSG = at(/^Синус-Гордон$/);
+  const c = list.children[iSG];
+  ck('в карточке на телефоне есть формула', !!c.querySelector('.peq'), c.textContent);
+  const f = c.querySelector('.peq').getBoundingClientRect();
+  ck('формула не схлопнута', f.width > 40 && f.height > 10,
+     f.width.toFixed(0) + '×' + f.height.toFixed(0));
+  const note = c.querySelector('.note');
+  ck('объяснение под формулой не пусто', !!note && note.textContent.length > 40,
+     note ? note.textContent : 'нет строки');
+  const nm = c.querySelector('.nm');
+  ck('имя переносится, а не уезжает вбок', nm.scrollWidth <= nm.clientWidth + 1,
+     nm.scrollWidth + ' vs ' + nm.clientWidth);
+  /* карточка целиком помещается в ширину экрана: формула ездит внутри своей
+     строки (.pform), а не растягивает список */
+  const lr = list.getBoundingClientRect();
+  ck('список не шире экрана', lr.right <= innerWidth + 0.5 && lr.left >= -0.5,
+     lr.left.toFixed(1) + '…' + lr.right.toFixed(1) + ' при ' + innerWidth);
+  ck('список не вылезает за низ экрана', lr.bottom <= innerHeight + 0.5,
+     lr.bottom.toFixed(1) + ' vs ' + innerHeight);
+  /* по значку в карточке на телефоне не наводят, а держат палец: цель должна быть
+     не мельче пальца, иначе промах выберет пресет вместо показа подсказки */
+  const fxi = [...list.children[at(/Кортевег/)].querySelectorAll('.fxi')];
+  const tiny = fxi.filter(e => e.getBoundingClientRect().width < 24 ||
+                               e.getBoundingClientRect().height < 24);
+  ck('значки в карточке не мельче пальца', fxi.length > 0 && tiny.length === 0,
+     fxi.map(e => e.getBoundingClientRect().width.toFixed(1) + '×' +
+                  e.getBoundingClientRect().height.toFixed(1)).join(' '));
 });
 
-/* --- список раскрывается только до верхнего края превью ---
-   Превью лежит внизу экрана, список раскрывается сверху, и они налезали друг на
-   друга: у длинной формулы с расшифровкой фишек превью съедало нижние пункты. */
+/* --- один тап выбирает --- */
 steps.push(() => {
-  const check = (name, i) => {
-    list.children[i].click();
-    const lr = list.getBoundingClientRect(), pr = prev.getBoundingClientRect();
-    ck('список кончается над превью: ' + name, lr.bottom <= pr.top - 4,
-       'низ списка ' + lr.bottom.toFixed(1) + ', верх превью ' + pr.top.toFixed(1));
-    ck('список не схлопнут: ' + name, lr.height > 100, lr.height.toFixed(1));
-    return pr.height;
-  };
-  const hSG = check('синус-Гордон', at(/отскок/));      // формула + три расшифровки
-  const hHeat = check('теплопроводность', at(/Теплопроводность/));  // формула без фишек
-  // потолок считается по факту, а не задан числом: разные превью — разный потолок
-  ck('высокое превью ужимает список сильнее', hSG > hHeat, hSG.toFixed(0) + ' vs ' + hHeat.toFixed(0));
-});
-
-/* --- выбирает только кнопка «выбрать» --- */
-steps.push(() => {
-  const iSG = at(/отскок/);
+  const iSG = at(/^Синус-Гордон$/);
   list.children[iSG].click();
-  prev.querySelector('.pick').click();
-  ck('«выбрать» применяет пресет', +$('preset').value === iSG, $('preset').value + ' vs ' + iSG);
+  ck('тап по карточке применяет пресет', +$('preset').value === iSG,
+     $('preset').value + ' vs ' + iSG);
   ck('и закрывает список', !list.classList.contains('on'));
   ck('уравнение подставлено', /sin\(u\)/.test($('eq').value), $('eq').value);
-  ck('потолок списка снят вместе с превью', list.style.maxHeight === '',
-     list.style.maxHeight);
+  ck('на кнопке — имя выбранной задачи', /Синус-Гордон/.test(btn.textContent),
+     btn.textContent);
 });
 
 steps.push(() => {

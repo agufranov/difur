@@ -241,49 +241,65 @@ steps.push(() => {
   D.loadPreset(D.PRESETS[0]);
 });
 
-/* --- превью формулы по наведению на пункт списка --- */
+/* --- карточка пресета: имя, формула, объяснение ---
+   Раньше в пункте списка стояло одно имя, а формула показывалась в отдельном
+   окошке-превью сбоку (на телефоне — внизу экрана). Из-за этого весь смысл задачи
+   сваливали в скобки к имени, и многоточие обрезало как раз их. Теперь пункт —
+   карточка: имя, формула и строка «что увидишь». Проверки вёрстки формулы
+   (индексы, этажерка, скобка системы) те же, что были у превью, — сменилось
+   только место, где формула живёт. */
 steps.push(() => {
-  const btn = $('presetbtn'), list = $('plist'), prev = $('eqprev');
-  const hover = i => list.children[i].dispatchEvent(
-    new PointerEvent('pointerover', { bubbles:true, pointerId:1 }));
+  const btn = $('presetbtn'), list = $('plist');
+  const card = i => list.children[i];
+  const html = i => card(i).innerHTML, text = i => card(i).textContent;
   btn.click();
   const iKdV = D.PRESETS.findIndex(p => /Кортевег/.test(p.name));
-  hover(iKdV);
-  ck('наведение показывает превью', prev.classList.contains('on'), prev.className);
-  ck('производные — нижними индексами', /<b[^>]*>u<sub>xxx<\/sub><\/b>/.test(prev.innerHTML),
-     prev.textContent);
-  ck('умножение — точкой', prev.textContent.indexOf('·') >= 0, prev.textContent);
-  /* Имя в списке обрезается многоточием, поэтому целиком его показывает заголовок
-     превью — и показывает первым, до формулы */
+  ck('формула лежит в самой карточке', !!card(iKdV).querySelector('.peq'), text(iKdV));
+  ck('производные — нижними индексами', /<b[^>]*>u<sub>xxx<\/sub><\/b>/.test(html(iKdV)),
+     text(iKdV));
+  ck('умножение — точкой', text(iKdV).indexOf('·') >= 0, text(iKdV));
+
+  /* Пояснения больше не в скобках у имени: имя — только название уравнения,
+     объяснение — отдельной строкой. Если скобки вернутся, вернётся и мешанина. */
+  const parens = D.PRESETS.filter(p => /\(/.test(p.name)).map(p => p.name);
+  ck('в именах пресетов не осталось пояснений в скобках', parens.length === 0,
+     parens.join(' | '));
+  const noNote = D.PRESETS.filter(p => !p.note || p.note.length < 40).map(p => p.name);
+  ck('у каждого пресета есть объяснение', noNote.length === 0, noNote.join(' | '));
+
   const iLong = D.PRESETS.reduce((b, p, j) => p.name.length > D.PRESETS[b].name.length ? j : b, 0);
-  hover(iLong);
-  const ttl = prev.querySelector('.ttl');
-  ck('заголовок превью — полное имя пресета',
-     !!ttl && ttl.textContent === D.PRESETS[iLong].name, ttl ? ttl.textContent : 'нет заголовка');
-  ck('заголовок стоит над формулой',
-     !!ttl && !!(ttl.compareDocumentPosition(prev.querySelector('.peq')) &
-                 Node.DOCUMENT_POSITION_FOLLOWING));
-  ck('длинное имя не обрезано в заголовке',
-     ttl.scrollWidth <= ttl.clientWidth + 1,
-     ttl.scrollWidth + ' vs ' + ttl.clientWidth);
-  hover(iKdV);
-  const r = prev.getBoundingClientRect(), lr = list.getBoundingClientRect();
-  ck('превью справа от списка', r.left >= lr.right, 'x=' + r.left.toFixed(0) + ' список до ' + lr.right.toFixed(0));
+  const nm = card(iLong).querySelector('.nm'), note = card(iLong).querySelector('.note');
+  ck('имя в карточке — полное имя пресета', nm.textContent === D.PRESETS[iLong].name,
+     nm.textContent);
+  ck('длинное имя не обрезано', nm.scrollWidth <= nm.clientWidth + 1,
+     nm.scrollWidth + ' vs ' + nm.clientWidth);
+  ck('объяснение в карточке — текст из note', note.textContent === D.PRESETS[iLong].note,
+     note.textContent);
+  /* порядок в карточке: имя, потом формула, потом объяснение */
+  const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+  ck('имя стоит над формулой', after(nm, card(iLong).querySelector('.peq')));
+  ck('объяснение стоит под формулой', after(card(iLong).querySelector('.peq'), note));
+
+  /* Формула шире карточки бывает (Захаров), но ездить она обязана внутри своей
+     строки: иначе широкая формула растянула бы весь список. */
+  const wide = D.PRESETS.map((p, j) =>
+      card(j).scrollWidth > list.clientWidth + 1 ? p.name : null).filter(Boolean);
+  ck('широкая формула не растягивает список', wide.length === 0, wide.join(' | '));
 
   const iPow = D.PRESETS.findIndex(p => /\^2/.test(p.eq));
-  hover(iPow);
-  ck('степень — верхним индексом', !!prev.querySelector('sup') && prev.innerHTML.indexOf('^') < 0,
-     prev.textContent);
+  ck('степень — верхним индексом',
+     !!card(iPow).querySelector('sup') && html(iPow).indexOf('^') < 0, text(iPow));
 
   const iSys = D.PRESETS.findIndex(p => /\n/.test(p.eq));
-  hover(iSys);
   const lines = D.PRESETS[iSys].eq.split('\n').length;
-  ck('система собрана под скобкой', !!prev.querySelector('.brace'), prev.textContent);
-  ck('в превью столько строк, сколько уравнений',
-     prev.querySelectorAll('.pl').length === lines,
-     prev.querySelectorAll('.pl').length + ' vs ' + lines);
-  /* скобка рисуется по измеренной высоте — она обязана совпадать с высотой системы */
-  const br = prev.querySelector('.brace'), pls = prev.querySelector('.pls');
+  ck('система собрана под скобкой', !!card(iSys).querySelector('.brace'), text(iSys));
+  ck('в карточке столько строк, сколько уравнений',
+     card(iSys).querySelectorAll('.pl').length === lines,
+     card(iSys).querySelectorAll('.pl').length + ' vs ' + lines);
+  /* Скобка рисуется по измеренной высоте, а у закрытого списка высота нулевая:
+     fitMath поэтому вызывается на первом раскрытии (см. openList). Эта проверка
+     и стоит за тем вызовом — без него скобки не будет вовсе. */
+  const br = card(iSys).querySelector('.brace'), pls = card(iSys).querySelector('.pls');
   ck('скобка нарисована, а не набрана шрифтом', !!(br && br.querySelector('svg path')),
      br ? br.innerHTML.slice(0, 40) : 'нет скобки');
   const hb = br.getBoundingClientRect().height, hp = pls.getBoundingClientRect().height;
@@ -291,17 +307,17 @@ steps.push(() => {
      hb.toFixed(1) + ' vs ' + hp.toFixed(1));
 
   const iFrac = D.PRESETS.findIndex(p => /\//.test(p.eq));
-  hover(iFrac);
-  const fr = prev.querySelector('.frac');
+  const fr = card(iFrac).querySelector('.frac');
   ck('деление — этажеркой', !!(fr && fr.querySelector('.fnum') && fr.querySelector('.fden')),
-     prev.textContent);
-  ck('косой черты в формуле не осталось', prev.textContent.indexOf('/') < 0, prev.textContent);
+     text(iFrac));
+  ck('косой черты в формуле не осталось',
+     card(iFrac).querySelector('.pform').textContent.indexOf('/') < 0, text(iFrac));
   const iGreek = D.PRESETS.findIndex(p => /\bnu\b|\beps\b/.test(p.eq));
-  if (iGreek >= 0) {
-    hover(iGreek);
-    ck('греческие буквы подставлены', /ν|ε/.test(prev.textContent), prev.textContent);
-  }
-  /* --- фишки: значки у правого края пункта и их расшифровка в превью --- */
+  if (iGreek >= 0)
+    ck('греческие буквы подставлены',
+       /ν|ε/.test(card(iGreek).querySelector('.pform').textContent), text(iGreek));
+
+  /* --- фишки: значки в шапке карточки, расшифровка — подсказкой --- */
   const ids = i => D.FX[i].map(c => c.id).join(',');
   const at = re => D.PRESETS.findIndex(p => re.test(p.name));
   const cxPreset = D.FX.findIndex(cs => cs.some(c => c.id === 'cx'));
@@ -319,12 +335,12 @@ steps.push(() => {
      ids(at(/Шрёдингер/)) === 'cx,dsp,cons,sc', ids(at(/Шрёдингер/)));
   ck('у хищника–жертвы — система, нелинейность и сглаживание',
      ids(at(/Хищник/)) === 'sys,nl,dif', ids(at(/Хищник/)));
-  ck('у синус-Гордона ещё солитоны и «опыт»', ids(at(/отскок/)) === 'utt,nl,sol,st', ids(at(/отскок/)));
+  ck('у синус-Гордона ещё солитоны и «опыт»', ids(at(/^Синус-Гордон$/)) === 'utt,nl,sol,st', ids(at(/^Синус-Гордон$/)));
   // солитоны приписаны руками: из текста их не вывести, и нелинейности для них мало —
   // Бюргерс и Курамото–Сивашинский нелинейны, а солитонов у них нет
   ck('у КдФ — нелинейность, дисперсия и солитоны', ids(at(/Кортевег/)) === 'nl,dsp,sol',
      ids(at(/Кортевег/)));
-  ck('у Бюргерса солитонов нет', ids(at(/Бюргерс \(/)) === 'nl,dif', ids(at(/Бюргерс \(/)));
+  ck('у Бюргерса солитонов нет', ids(at(/^Бюргерс$/)) === 'nl,dif', ids(at(/^Бюргерс$/)));
   ck('у Курамото–Сивашинского солитонов нет', ids(at(/Курамото/)) === 'nl,dif,amp',
      ids(at(/Курамото/)));
 
@@ -357,50 +373,76 @@ steps.push(() => {
   // нелинейность отменяет обещания про форму решения: у синус-Гордона λ = ±ik, как у
   // волнового, но sin(u) может и раскачать, и погасить — «снос» и «без потерь» молчат
   ck('нелинейность снимает «снос» и «без потерь»',
-     !/adv|cons/.test(ids(at(/отскок/))) && !/adv|cons/.test(ids(at(/Кортевег/))),
-     ids(at(/отскок/)) + ' / ' + ids(at(/Кортевег/)));
-  /* В пункте — только фишки с `list:true`: остальные говорят про механизм и висят
+     !/adv|cons/.test(ids(at(/^Синус-Гордон$/))) && !/adv|cons/.test(ids(at(/Кортевег/))),
+     ids(at(/^Синус-Гордон$/)) + ' / ' + ids(at(/Кортевег/)));
+  /* В карточке — только фишки с `list:true`: остальные говорят про механизм и висят
      полным набором под кнопкой (#fxbar). Если этот тест начнёт считать все фишки,
-     значит ряд в пункте опять разросся до восьми значков и съел имя. */
+     значит ряд в шапке карточки опять разросся до восьми значков и съел имя. */
   const bad = D.PRESETS.map((p, i) =>
       list.children[i].querySelectorAll('svg.chip').length ===
       D.FX[i].filter(c => c.list).length ? null : p.name)
     .filter(Boolean);
-  ck('в пункте ровно те значки, что помечены list', bad.length === 0, bad.join(' | '));
-  ck('механизм в пункт не лезет',
+  ck('в карточке ровно те значки, что помечены list', bad.length === 0, bad.join(' | '));
+  ck('механизм в карточку не лезет',
      D.PRESETS.every((p, i) => ![...list.children[i].querySelectorAll('svg.chip')].length ||
        D.FX[i].filter(c => c.list).length <= 5) &&
      D.CHIPS.filter(c => c.list).map(c => c.id).join(',') === 'cx,nl,sol,sc,st',
      D.CHIPS.filter(c => c.list).map(c => c.id).join(','));
-  ck('у КдФ в пункте два значка вместо трёх',
+  ck('у КдФ в карточке два значка вместо трёх',
      list.children[iKdV].querySelectorAll('svg.chip').length === 2,
      list.children[iKdV].querySelectorAll('svg.chip').length);
 
-  hover(at(/Хищник/));
-  ck('превью раскрывает нелинейность словами', /нелинейное/.test(prev.textContent), prev.textContent);
-  // «систему» не раскрываем: что уравнений несколько, видно по самой формуле выше
-  ck('«система» в превью не раскрывается', prev.textContent.indexOf('система') < 0, prev.textContent);
-  hover(at(/Шрёдингер/));
-  ck('превью раскрывает комплексное поле и сценарии',
-     /комплексное поле/.test(prev.textContent) && /сценарии/.test(prev.textContent), prev.textContent);
-  ck('значок в расшифровке тот же, что в пункте',
-     prev.querySelectorAll('.fxwhy svg.chip').length === 4,
-     prev.querySelectorAll('.fxwhy svg.chip').length);
-  /* Пресетов без единой расшифровки не осталось: фишки по символу закрыли и
-     теплопроводность, и перенос — те два, что раньше стояли в списке немыми. */
-  hover(at(/Теплопроводность/));
-  ck('у теплопроводности ровно одна расшифровка',
-     prev.querySelectorAll('.fxwhy>div').length === 1 && /сглаживание/.test(prev.textContent),
-     prev.querySelectorAll('.fxwhy>div').length + ' ' + prev.textContent);
+  /* Значок сам по себе ребус: расшифровка висит на нём подсказкой (data-tip),
+     как раньше висела блоком в превью. Проверяем, что она на месте и что это та
+     самая расшифровка, а не одно имя. */
+  const tips = i => [...list.children[i].querySelectorAll('.fxi')]
+    .map(e => e.getAttribute('data-tip') || '');
+  const bare = D.PRESETS.map((p, i) =>
+      tips(i).every(t => /^[^|]+\|.{20,}/.test(t)) ? null : p.name).filter(Boolean);
+  ck('у каждого значка в карточке есть имя и расшифровка', bare.length === 0,
+     bare.join(' | '));
+  ck('расшифровка нелинейности — словами',
+     /нелинейное\|.*умножается само на себя/.test(tips(at(/Хищник/)).join(' ')),
+     tips(at(/Хищник/)).join(' / '));
+  ck('у Шрёдингера в карточке комплексное поле и сценарии',
+     /комплексное поле/.test(tips(at(/Шрёдингер/)).join(' ')) &&
+     /сценарии/.test(tips(at(/Шрёдингер/)).join(' ')), tips(at(/Шрёдингер/)).join(' / '));
+  // «систему» не раскрываем и в карточку не пускаем: что уравнений несколько,
+  // видно по самой формуле строкой ниже имени
+  ck('«система» в карточку не попадает',
+     D.PRESETS.every((p, i) => !/система/.test(tips(i).join(' '))),
+     tips(at(/Хищник/)).join(' / '));
+  /* Механизм (сглаживание, дисперсия, снос) в карточку не лезет: у теплопроводности
+     единственная фишка как раз механизм, и значков в её карточке нет вовсе —
+     полный набор ждёт под кнопкой, для того уравнения, которое считается. */
+  ck('у теплопроводности в карточке значков нет', tips(at(/Теплопроводность/)).length === 0,
+     tips(at(/Теплопроводность/)).join(' / '));
 
-  list.dispatchEvent(new PointerEvent('pointerleave', { bubbles:true, pointerId:1 }));
-  ck('уход мыши прячет превью', !prev.classList.contains('on'));
+  /* Карточек в списке несколько колонок (grid auto-fill), и «вниз» обязано вести
+     на карточку ПОД текущей, а не на соседнюю справа: иначе стрелка идёт не туда,
+     куда смотрит глаз. Число колонок и код, и тест берут у самой сетки. */
+  const cols = getComputedStyle(list).gridTemplateColumns.split(' ').length;
+  ck('на широком экране карточки в две колонки', cols === 2, cols);
+  const hiAt = () => [...list.children].findIndex(e => e.classList.contains('hi'));
+  const key = k => btn.dispatchEvent(new KeyboardEvent('keydown', { key:k, bubbles:true }));
+  btn.focus();
+  const was0 = hiAt();
+  key('ArrowDown');
+  ck('↓ ведёт под текущую карточку, а не вбок', hiAt() === was0 + cols,
+     was0 + ' -> ' + hiAt());
+  key('ArrowRight');
+  ck('→ ведёт на соседнюю', hiAt() === was0 + cols + 1, hiAt());
+  key('ArrowUp');
+  ck('↑ возвращает на строку выше', hiAt() === was0 + 1, hiAt());
+  key('ArrowLeft');
+  ck('← возвращает к началу', hiAt() === was0, hiAt());
+
   btn.click();                       // закрыть список
   ck('повторный клик закрывает список', !list.classList.contains('on'));
 });
 
 /* --- полный набор фишек под кнопкой списка (#fxbar) ---
-   В пункте остались только пять «что это за задача»; механизм (снос, дисперсия,
+   В карточке остались только пять «что это за задача»; механизм (снос, дисперсия,
    сглаживание, раскачка, «без потерь») ушёл под кнопку — и показывается для того
    уравнения, которое сейчас считается, включая своё. Пресетные фишки при этом
    считаются один раз (FX), а эти — каждый раз заново, поэтому тут проверяется
@@ -439,7 +481,7 @@ steps.push(() => {
      names().length === n0 && names().indexOf(nameOf('smt')) < 0, names().join(','));
 
   // параметр входит в символ S(k) наравне с производными: nu = 0 — уже не сглаживание
-  const iB = D.PRESETS.findIndex(p => /Бюргерс \(/.test(p.name));
+  const iB = D.PRESETS.findIndex(p => /^Бюргерс$/.test(p.name));
   D.loadPreset(D.PRESETS[iB]);
   ck('у Бюргерса с вязкостью — сглаживание', names().indexOf(nameOf('dif')) >= 0, names().join(','));
   D.applySystem(D.PRESETS[iB].eq, { nu:0 });
@@ -719,7 +761,7 @@ steps.push(() => {
 });
 
 steps.push(() => {
-  const p = D.PRESETS.find(q => /опрокидывание/.test(q.name));
+  const p = D.PRESETS.find(q => /без вязкости/.test(q.name));
   D.loadPreset(p);
   ck('пресет с опрокидыванием включает гашение сам',
      D.S.smooth && $('smooth').classList.contains('on'));

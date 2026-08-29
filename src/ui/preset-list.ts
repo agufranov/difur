@@ -1,7 +1,14 @@
-/* ================= пресеты: список, превью, загрузка ================= */
-import { $, $i, S, clamp, escHTML, mob, sim } from './state';
+/* ================= пресеты: список карточек и загрузка =================
+   Пункт списка — карточка: имя, формула и строка «что увидишь». Раньше пункт был
+   строкой с именем, а формула жила в отдельном окошке-превью сбоку (на телефоне —
+   внизу экрана, с кнопкой «выбрать»). Из-за этого имя было единственным текстом в
+   списке, и в него сваливали всё сразу — «Кортевег–де Фриз (солитоны)»,
+   «Бюргерс без вязкости (опрокидывание горба)», — после чего многоточие обрезало
+   как раз пояснение. Карточка показывает три вещи по отдельности, превью стало
+   не нужно, а вместе с ним ушла и телефонная возня с двумя тапами. */
+import { $, $i, S, clamp, mob, sim } from './state';
 import { PRESETS, Preset, PresetCfg } from './presets';
-import { chipRow, chipWhy } from './chips-view';
+import { cardChips } from './chips-view';
 import { fitMath, prettyEq } from './math-preview';
 import { autosizeEq } from './highlight';
 import { applySystem } from './apply';
@@ -12,8 +19,9 @@ import { clearXT, draw } from './render';
 import { setSmooth, syncPad, syncPlay, syncSpeed } from './controls';
 
 const sel = $('preset') as HTMLSelectElement;
-const pbtn = $('presetbtn'), plist = $('plist'), eqprev = $('eqprev');
+const pbtn = $('presetbtn'), plist = $('plist');
 let hiIdx = -1;
+let fitted = false;                    // скобки формул дорисованы? (см. openList)
 
 const isOpen = () => plist.classList.contains('on');
 const itemAt = (i: number) => plist.children[i] as HTMLElement | undefined;
@@ -23,58 +31,20 @@ export function syncPresetBtn() {
   pbtn.textContent = i >= 0 ? PRESETS[i].name : '— своё уравнение —';
 }
 
-/** превью формулы — справа от списка, по вертикали у самого пункта.
-    На телефоне справа места нет, поэтому превью ложится внизу экрана во всю
-    ширину и получает кнопку «выбрать»: тап по пункту показывает формулу, а не
-    применяет её сразу — иначе вёрстку формулы на телефоне никто бы не увидел. */
-const PREV_GAP = 8;                    // зазор между низом списка и верхом превью
-
-function showPrev(i: number) {
-  const el = itemAt(i); if (!el) return;
-  const phone = mob.matches;
-  /* Заголовок — имя пресета: в списке и на кнопке длинное имя обрезается
-     многоточием («Опрокидывание горба (Бюргерс без…»), и целиком его негде
-     прочитать. В превью оно переносится и видно полностью. */
-  eqprev.innerHTML = '<div class="ttl">' + escHTML(PRESETS[i].name) + '</div>' +
-    prettyEq(PRESETS[i].eq) + chipWhy(i) +
-    (phone ? '<button class="pick" data-i="' + i + '">выбрать</button>' : '');
-  fitMath(eqprev);                     // скобки рисуются по уже измеренной высоте
-  eqprev.classList.toggle('phone', phone);
-  eqprev.classList.add('on');
-  if (phone) {                         // место и размер задаёт CSS, инлайн — снять
-    eqprev.style.left = ''; eqprev.style.top = '';
-    /* Превью лежит внизу экрана, список раскрывается сверху — и они налезали друг
-       на друга: у длинной формулы с расшифровкой фишек превью съедало нижние
-       пункты. Высота превью зависит от пресета, поэтому потолок списка считается
-       по факту, от измеренного верхнего края превью, а не задаётся в CSS числом. */
-    const top = eqprev.getBoundingClientRect().top;
-    plist.style.maxHeight = Math.max(90, top - PREV_GAP - plist.getBoundingClientRect().top) + 'px';
-    el.scrollIntoView({ block:'nearest' });   // список ужался — пункт под пальцем не прятать
-    return;
-  }
-  const lr = plist.getBoundingClientRect(), ir = el.getBoundingClientRect();
-  const w = eqprev.offsetWidth, h = eqprev.offsetHeight;
-  const right = lr.right + 10;
-  eqprev.style.left = (right + w + 8 <= innerWidth ? right
-                       : Math.max(8, lr.left - w - 10)) + 'px';
-  eqprev.style.top = clamp(ir.top - 10, 8, Math.max(8, innerHeight - h - 8)) + 'px';
-}
-function hidePrev() {
-  eqprev.classList.remove('on');
-  plist.style.maxHeight = '';          // потолок был подогнан под превью — вернуть в CSS
-}
-
 function markHi() {
   [...plist.children].forEach((el, i) => {
     el.classList.toggle('hi', i === hiIdx);
     el.classList.toggle('cur', i === +sel.value);
   });
-  if (hiIdx >= 0) showPrev(hiIdx); else hidePrev();
 }
 
 function openList(on: boolean) {
   plist.classList.toggle('on', on);
   pbtn.classList.toggle('open', on);
+  /* Скобки формул рисуются по измеренной высоте содержимого (fitMath), а у
+     закрытого списка вся высота нулевая: пока он `display:none`, мерить нечего.
+     Поэтому первый показ — и есть момент, когда их можно дорисовать. */
+  if (on && !fitted) { fitted = true; fitMath(plist); }
   hiIdx = on ? +sel.value : -1;
   markHi();
   if (on && hiIdx >= 0) itemAt(hiIdx)!.scrollIntoView({ block:'nearest' });
@@ -101,9 +71,14 @@ export function initPresetList() {
 
   PRESETS.forEach((p, i) => {
     const d = document.createElement('div');
-    d.className = 'pitem'; d.dataset.i = String(i);
-    d.innerHTML = '<span class="nm"></span>' + chipRow(i);
-    (d.querySelector('.nm') as HTMLElement).textContent = p.name;   // имя — текстом, значки — рядом справа
+    d.className = 'pitem'; d.dataset.i = String(i); d.setAttribute('role', 'option');
+    /* Имя — textContent, а не в разметку: в именах есть «φ⁴» и тире, но подставлять
+       чужой текст в innerHTML незачем. Формула и значки — уже готовый HTML. */
+    d.innerHTML = '<div class="phead"><span class="nm"></span>' + cardChips(i) + '</div>' +
+      '<div class="pform">' + prettyEq(p.eq) + '</div>' +
+      '<div class="note"></div>';
+    (d.querySelector('.nm') as HTMLElement).textContent = p.name;
+    (d.querySelector('.note') as HTMLElement).textContent = p.note;
     plist.appendChild(d);
   });
 
@@ -112,36 +87,29 @@ export function initPresetList() {
     const it = (e.target as HTMLElement).closest('.pitem') as HTMLElement | null;
     if (it) { hiIdx = +it.dataset.i!; markHi(); }
   });
-  // на телефоне палец уходит с пункта сразу после тапа — превью не должно гаснуть
-  plist.addEventListener('pointerleave', () => { if (!mob.matches) hidePrev(); });
   plist.addEventListener('click', e => {
     const it = (e.target as HTMLElement).closest('.pitem') as HTMLElement | null;
     if (!it) return;
-    const i = +it.dataset.i!;
-    /* Телефон: тап по пункту только показывает формулу, применяет её одна кнопка —
-       «выбрать» в превью. Раньше повторный тап по тому же пункту тоже применял, и
-       список закрывался под пальцем у того, кто просто листал задачи и вернулся
-       к уже открытой: выбор происходил там, где его не просили. */
-    if (mob.matches) { hiIdx = i; markHi(); return; }
-    choose(i);
-  });
-  eqprev.addEventListener('click', e => {
-    const b = (e.target as HTMLElement).closest('.pick') as HTMLElement | null;
-    if (b) choose(+b.dataset.i!);
+    /* Один тап (клик) выбирает — и на телефоне тоже. Промежуточный шаг «тап
+       показывает формулу, кнопка „выбрать“ применяет» был нужен, пока формулу
+       негде было увидеть до выбора; теперь она в самой карточке. */
+    choose(+it.dataset.i!);
   });
   document.addEventListener('pointerdown', e => {
-    // превью с кнопкой «выбрать» лежит вне #presetbox — по нему список не закрываем,
-    // иначе кнопка исчезнет из-под пальца ещё до click
-    if (isOpen() && !$('presetbox').contains(e.target as Node) && !eqprev.contains(e.target as Node))
-      openList(false);
+    if (isOpen() && !$('presetbox').contains(e.target as Node)) openList(false);
   });
+  /* Карточки разложены в столько колонок, сколько влезло (grid auto-fill), поэтому
+     «вниз» — это не «следующий по счёту», а «через колонку». Число колонок берётся
+     у самой сетки: считать его по ширине значило бы дублировать правило из CSS. */
+  const cols = () => getComputedStyle(plist).gridTemplateColumns.split(' ').length;
   pbtn.addEventListener('keydown', e => {
     if (e.key === 'Escape') { openList(false); return; }
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    const step = e.key === 'ArrowDown' ? cols() : e.key === 'ArrowUp' ? -cols()
+               : e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
+    if (step) {
       e.preventDefault();
       if (!isOpen()) { openList(true); return; }
-      hiIdx = clamp((hiIdx < 0 ? +sel.value : hiIdx) + (e.key === 'ArrowDown' ? 1 : -1),
-                    0, PRESETS.length - 1);
+      hiIdx = clamp((hiIdx < 0 ? +sel.value : hiIdx) + step, 0, PRESETS.length - 1);
       markHi(); itemAt(hiIdx)!.scrollIntoView({ block:'nearest' });
       return;
     }
@@ -150,6 +118,9 @@ export function initPresetList() {
       if (hiIdx >= 0) choose(hiIdx);
     }
   });
+  // на телефоне список занимает почти весь экран, и его высота считается от
+  // текущей — при повороте она меняется вдвое; заодно снимаем зависшую подсветку
+  addEventListener('resize', () => { if (isOpen() && mob.matches) openList(false); });
 }
 
 /** Грузит пресет; `si` — номер сценария у пресетов со списком `sc`. Сценарий
